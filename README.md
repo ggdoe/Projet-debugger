@@ -1,4 +1,5 @@
 -> https://france.paratools.com/hedgedoc/s/c1OJBdnKt
+-> https://github.com/openbsd/src/blob/master/libexec/ld.so/ldd/ldd.c
 
 # Analyse de processus en cours d'exécution
 
