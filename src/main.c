@@ -42,7 +42,7 @@ int main()
 			perror("ptrace TRACEME");
 			exit(1);
 		}
-		printf("fils\n");
+		// printf("fils\n");
 		if(execv(args[0], args) < 0){
 			perror("execv");
 			exit(1);
@@ -82,16 +82,15 @@ int main()
 		ptrace(PTRACE_CONT, child, 0,0);
 	}
 
-	printf("end\n");
+	// printf("end\n");
 	return 0;
 }
 
 int ldd(char *filename)
 {
 	void* start = NULL;
-	int fd, nb_symbols;
+	int fd;
 	struct stat stat;
-	char *strtab;
 
 	fd = open(filename, O_RDONLY);
 	if(fd < 0)
@@ -107,25 +106,17 @@ int ldd(char *filename)
 	}
 
 	Elf64_Ehdr* hdr = (Elf64_Ehdr *) start;
-	Elf64_Sym* symtab;
 
 	if(memcmp(hdr->e_ident, ELFMAG, SELFMAG))
 		printf("%s is not a valid elf file.", filename);
 
 	Elf64_Shdr* sections = (Elf64_Shdr *)((char *)start + hdr->e_shoff);
 
-	int i = 0;
-	for (i = 0; i < hdr->e_shnum; i++){
-		if (sections[i].sh_type == SHT_SYMTAB) {
-			symtab = (Elf64_Sym *)((char *)start + sections[i].sh_offset);
-			nb_symbols = sections[i].sh_size / sections[i].sh_entsize;
-			strtab = (char*)((char*)start + sections[sections[i].sh_link].sh_offset);
-			break;
-		}
-	}
-	for (; i < nb_symbols; ++i) {
-		printf("%d: %s\n", i, strtab + symtab[i].st_name);
-	}
+	print_symtab(hdr, sections);
+	// print_section_header(hdr, sections);
+
+	munmap(start, stat.st_size);
+	close(fd);
 
 	// -- readelf / nm / elfutils / libunwind
 

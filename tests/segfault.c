@@ -4,6 +4,9 @@
 
 #define SIZE 10
 
+int mysqr(int x){
+	return x*x;
+}
 
 int main()
 {
