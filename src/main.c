@@ -84,6 +84,7 @@ size_t *mbacktrace(pid_t child)
 	// chercher dans quelle fonction est rip, puis peek new_rbp
 	// chercher dans quelle fonction est return_addr, etc
 
+	// ajouter fonction print stackframe
 
 	return NULL;
 }
