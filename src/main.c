@@ -49,6 +49,23 @@ int main()
 
 size_t *mbacktrace(pid_t child)
 {
+	char path_maps[20];
+	snprintf(path_maps, 20, "/proc/%d/maps", child);
+	printf("%s\n", path_maps);
+	int fd_maps = open(path_maps, O_RDONLY);
+	if(fd_maps < 0)
+		perror("open");
+		
+	struct stat stat;
+	// fstat(fd_maps, &stat);
+	// printf("stat.st_size : %ld", stat.st_size);
+	char *buf = malloc(10000);
+	read(fd_maps, buf, 10000);
+	write(STDOUT_FILENO, buf, 10000);
+	free(buf);
+	// voir dladdr() 
+
+
 	long int return_addr;
 	long int next_rbp;
 
@@ -119,13 +136,17 @@ void print_signal(pid_t child)
 	const int MAX_LOOP = 10;
 	struct user_regs_struct regs, old_regs;
 	siginfo_t siginfo, old_siginfo;
+	int status;
 
 	for(int i = 0; i < MAX_LOOP; i++){
 		old_regs = regs;
 		old_siginfo = siginfo;
 
 		ptrace(PTRACE_CONT, child, 0,0);
-		wait(NULL);
+		wait(&status);
+
+		if (WIFEXITED(status))
+			return;
 
 		if(ptrace(PTRACE_GETSIGINFO, child, NULL, &siginfo) < 0){
 			perror("ptrace(GETSIGINFO)");
