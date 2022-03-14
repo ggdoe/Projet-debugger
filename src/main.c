@@ -23,6 +23,10 @@
 #include "tools.h"
 
 int ldd(char *filename);
+size_t *mbacktrace(pid_t child);
+pid_t exec_child(char *args[]);
+void print_signal(pid_t child);
+
 
 int main()
 {
@@ -30,35 +34,96 @@ int main()
 	// printf("%s\n", pwd);
 	// free(pwd);
 
-	pid_t child = fork();
 	char *args[] = {"./test_segv", NULL};
+	pid_t child = exec_child(args);
 
+	printf("ldd : %d\n", ldd(*args));
+	print_signal(child);
+	mbacktrace(child);
+
+	// printf("end\n");
+	return 0;
+}
+
+
+
+size_t *mbacktrace(pid_t child)
+{
+	long int return_addr;
+	long int next_rbp;
+
+	struct user_regs_struct regs;
+	// on recupere les registres du child
+	if(ptrace(PTRACE_GETREGS, child, NULL, &regs) < 0){
+		perror("ptrace(GETREGS)");
+		exit(1);
+	}
+
+	next_rbp = ptrace(PTRACE_PEEKDATA, child, regs.rbp, NULL);
+	return_addr = ptrace(PTRACE_PEEKDATA, child, regs.rbp + 8L, NULL);
+	if(next_rbp == -1 || return_addr == -1){
+		perror("ptrace PEEK_DATA");
+	}
+
+	
+
+	printf("\n rip : %llx", regs.rip);
+	printf("\n rbp : %llx", regs.rbp);
+	printf("\nnrbp : %lx\n", next_rbp);
+	printf(" ret : %lx\n\n", return_addr); // 0x0000555555555249
+	// regs.rbp
+	for(int i = -15; i < 15; i++){
+		return_addr = ptrace(PTRACE_PEEKDATA, child, regs.rbp + 8*i, NULL);
+		printf("\n %llx - %16lx", regs.rbp + 8*i, return_addr);
+		// return_addr = ptrace(PTRACE_PEEKDATA, child, regs.rbp + 8*i+4, NULL);
+		// printf("\n %llx - %16lx -", regs.rbp + 8*i+4, return_addr);
+		if(i == 0) printf(" <--");
+	}
+	printf("\n");
+
+	// chercher dans quelle fonction est rip, puis peek new_rbp
+	// chercher dans quelle fonction est return_addr, etc
+
+
+	return NULL;
+}
+
+pid_t exec_child(char *args[])
+{
+	pid_t child = fork();
 	if(child < 0){
 		perror("fork");
 		return 1;
 	}
-	else if(child == 0){ // Child process
+	else if(child == 0){
 		if(ptrace(PTRACE_TRACEME, 0, NULL, NULL) < 0){
-			perror("ptrace TRACEME");
-			exit(1);
+		perror("ptrace TRACEME");
+		exit(1);
 		}
-		// printf("fils\n");
 		if(execv(args[0], args) < 0){
-			perror("execv");
+			perror("exec_child() : execv");
 			exit(1);
 		}
 	}
+	return child;
+}
 
-	//// ATTACH
-	// pid_t pid = 4614;
-	// ptrace(PTRACE_ATTACH, pid, 0, 0);
+/*
+	Avance l'etat du child jusqu'à la reception d'un signal
+		puis donne les infos de ce signal
+		puis essaye de continuer l'execution
+*/
+void print_signal(pid_t child)
+{
+	const int MAX_LOOP = 10;
+	struct user_regs_struct regs, old_regs;
+	siginfo_t siginfo, old_siginfo;
 
-	struct user_regs_struct regs;
-	siginfo_t siginfo;
+	for(int i = 0; i < MAX_LOOP; i++){
+		old_regs = regs;
+		old_siginfo = siginfo;
 
-	printf("ldd : %d\n", ldd(*args));
-
-	for(int i = 0; i < 5; i++){
+		ptrace(PTRACE_CONT, child, 0,0);
 		wait(NULL);
 
 		if(ptrace(PTRACE_GETSIGINFO, child, NULL, &siginfo) < 0){
@@ -70,20 +135,25 @@ int main()
 			perror("ptrace(GETREGS)");
 			exit(1);
 		}
+		if(	!memcmp(&regs, &old_regs, sizeof(struct user_regs_struct)) &&
+			!memcmp(&siginfo, &old_siginfo, sizeof(siginfo_t)) )
+		{
+			// on break car le child est bloqué au même endroit 
+			//	que l'itération précédente
+			break;
+		}
 
 		printf("signal : %s   |   errno : %s   |   code : %d\n", 
-				strsignal(siginfo.si_signo), strerror(siginfo.si_errno), 
-				siginfo.si_code);
+						strsignal(siginfo.si_signo), 
+						strerror(siginfo.si_errno), 
+						siginfo.si_code);
 
 		print_si_code(&siginfo);
 
 		// print_regs(&regs);
 		printf("\n%llx\n\n", regs.rip);
-		ptrace(PTRACE_CONT, child, 0,0);
 	}
 
-	// printf("end\n");
-	return 0;
 }
 
 int ldd(char *filename)
