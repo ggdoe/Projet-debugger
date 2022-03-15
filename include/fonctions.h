@@ -23,13 +23,30 @@
 
 #include "tools.h"
 
+struct maps {
+	size_t addr_start;
+	size_t addr_end;
+	// int flags;
+	//size_t offset; 
+	// char minor;
+	// char major;
+	// int inod;
+	char *pathname;
+};
+
+pid_t exec_child(char *args[]);
+
 int load_elf(char *filename, void **start);
 int close_elf(char *filename, void **start);
+
 size_t *mbacktrace(pid_t child);
-pid_t exec_child(char *args[]);
 void print_signal(pid_t child);
+
 void print_symtab(void *start);
 void print_section_header(void *start);
 
+size_t get_maps_struct(pid_t child, struct maps **maps);
+void free_maps_struct(struct maps *maps, size_t size_maps);
+void print_maps(pid_t child);
 
 #endif

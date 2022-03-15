@@ -1,7 +1,64 @@
 #include "fonctions.h"
 
 
-size_t get_maps_offset(pid_t child, bool print)
+size_t get_maps_struct(pid_t child, struct maps **maps) //double pointeur necessaire sinon segfault
+{
+	char path_maps[24];
+	snprintf(path_maps, 20, "/proc/%d/maps", child);
+
+	// FILE pour profiter de getline()
+	FILE *fd_maps=fopen(path_maps, "r");
+	if(!fd_maps){
+		perror("fopen");
+		exit(1);
+	}
+
+	size_t size_buf = 0;
+	char* buff;
+	char buff_pathname[128];
+	size_t offs;
+
+	size_t sz_alloc_maps = 12; // taille initiale alloué
+	size_t i; // nombres d'elements dans la struct maps
+
+	*maps = (struct maps*) malloc(sz_alloc_maps * sizeof(struct maps));
+	
+	// while ((len_buf=getline(&buf, &size_buf, fd_maps)>0)){
+	
+	for(i = 0; getline(&buff, &size_buf, fd_maps) > 0; i++)
+	{
+		if(i >= sz_alloc_maps) // si on manque de place, on double le buffer
+			*maps = (struct maps*) realloc(*maps, (sz_alloc_maps <<= 1) * sizeof(struct maps));
+
+		// on insere un null au debut pour fix le cas ou la string (dans maps) est vide, sscanf ne met pas la string à jours
+		buff_pathname[0] = '\0';
+
+		// on parse la ligne de /proc/maps
+		sscanf(buff, "%12lx-%12lx %*s %08lx %*s %*s %s", 
+			&(*maps)[i].addr_start, 
+			&(*maps)[i].addr_end, 
+			&offs, // on pourrait récupérer offset dans la struct
+			buff_pathname
+			);
+
+		// on alloue la place pour pathname, (strdup appel malloc)
+		(*maps)[i].pathname = strdup(buff_pathname);
+
+		// printf("%s", buff);
+		// printf("%012lx-%012lx ---- %08lx --\t\t\t\t %s\n", (*maps)[i].addr_start, (*maps)[i].addr_end, offs, (*maps)[i].pathname);
+	}
+
+	return i; // on renvoie le nombre d'element écrit dans struct maps
+	return 0;
+}
+
+void free_maps_struct(struct maps *maps, size_t size_maps){
+	for(size_t i = 0; i < size_maps; i++)
+		free(maps[i].pathname); // on free le strdup()
+	free(maps);
+}
+
+void print_maps(pid_t child)
 {
 	char path_maps[20];
 	snprintf(path_maps, 20, "/proc/%d/maps", child);
@@ -10,26 +67,24 @@ size_t get_maps_offset(pid_t child, bool print)
 	if(fd_maps < 0)
 		perror("open");
 
-	const size_t size_buf = 2<<13;
+	const size_t size_buf = 1<<7;
 	char *buf = malloc(size_buf);
+	ssize_t nbr_read;
 
-    // changer pour une boucle
-	ssize_t nbr_read = read(fd_maps, buf, size_buf);
-	
-	if(print)
+	while((nbr_read = read(fd_maps, buf, size_buf)) > 0){
 		write(STDOUT_FILENO, buf, nbr_read);
-
-	size_t mem_maps_off = strtoul(buf, NULL, 16);
+	}
 	
 	free(buf);
 	close(fd_maps);
-
-	return mem_maps_off;
 }
 
 size_t *mbacktrace(pid_t child)
 {
-	size_t mem_maps_off = get_maps_offset(child, true);
+	struct maps *smaps;
+	size_t size_maps = get_maps_struct(child, &smaps);
+	size_t mem_maps_off = smaps[0].addr_start;
+	free_maps_struct(smaps, size_maps);
 
 	// struct stat stat;
 	// fstat(fd_maps, &stat);
@@ -50,7 +105,7 @@ size_t *mbacktrace(pid_t child)
 		exit(1);
 	}
 	
-	arr_trace[0] = regs.rip;// - mem_maps_off;
+	arr_trace[0] = regs.rip;
 	rbp = regs.rbp;
 
 	int i = 0;
@@ -58,16 +113,16 @@ size_t *mbacktrace(pid_t child)
 	{
 		return_addr = ptrace(PTRACE_PEEKDATA, child, rbp + 8L, NULL);
 		rbp = ptrace(PTRACE_PEEKDATA, child, rbp, NULL);
-		if(rbp == -1 || return_addr == -1){ // catch erreur probable
+		if((rbp == -1 || return_addr == -1) && errno ){ // catch erreur probable
 			perror("ptrace PEEK_DATA");
 		}
-		arr_trace[++i] = return_addr;// - mem_maps_off;
+		arr_trace[++i] = return_addr;
 		// if(return_addr < 0x700000000000)
 		// 	arr_trace[i] -= mem_maps_off;
 
 	}
 
-	arr_trace[++i] = -1; // fin du tab
+	arr_trace[++i] = -1; // fin du tab : 0xffffff...
 	
 	printf("\nbacktrace :\n");
 	for(int j = 0; j < i; j++){
@@ -90,6 +145,7 @@ size_t *mbacktrace(pid_t child)
 	printf("\n");
 	*/
 
+	///////TODO OR DID
 	// chercher dans quelle fonction est rip, puis peek new_rbp
 	// chercher dans quelle fonction est return_addr, etc
 
@@ -99,6 +155,7 @@ size_t *mbacktrace(pid_t child)
     // breakpoint
 	// compter malloc / mmap (interposé mmap, stocker addr retour...)
 	// voir dl_iterate_pdhr
+	// explorer /proc/pid/ avec dir_ent voir TD ls
 
 	return arr_trace;
 }

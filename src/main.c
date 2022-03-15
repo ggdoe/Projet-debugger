@@ -18,9 +18,11 @@ int main()
 	print_symtab(start);
 	print_section_header(start);
 	print_signal(child);
-	mbacktrace(child);
+	print_maps(child);
+	size_t *arr_backtrace = mbacktrace(child);
 	close_elf(*args, &start);
 
+	free(arr_backtrace);
 	// printf("end\n");
 	return 0;
 }
