@@ -23,12 +23,13 @@
 
 #include "tools.h"
 
-int ldd(char *filename);
+int load_elf(char *filename, void **start);
+int close_elf(char *filename, void **start);
 size_t *mbacktrace(pid_t child);
 pid_t exec_child(char *args[]);
 void print_signal(pid_t child);
-void print_symtab(Elf64_Ehdr* hdr, Elf64_Shdr* sections);
-void print_section_header(Elf64_Ehdr* hdr, Elf64_Shdr* sections);
+void print_symtab(void *start);
+void print_section_header(void *start);
 
 
 #endif

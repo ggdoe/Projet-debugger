@@ -8,12 +8,18 @@ int main()
 	// printf("%s\n", pwd);
 	// free(pwd);
 
+	pid_t child;
 	char *args[] = {"./test_segv", NULL};
-	pid_t child = exec_child(args);
+	void* start = NULL;
 
-	printf("ldd : %d\n", ldd(*args));
+	child = exec_child(args);
+
+	load_elf(*args, &start);
+	print_symtab(start);
+	print_section_header(start);
 	print_signal(child);
 	mbacktrace(child);
+	close_elf(*args, &start);
 
 	// printf("end\n");
 	return 0;

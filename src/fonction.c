@@ -76,7 +76,7 @@ size_t *mbacktrace(pid_t child)
 
 	printf("\n rip : %llx", regs.rip);
 	printf("\n rbp : %llx", regs.rbp);
-	printf("\n rsp : %lx\n", regs.rsp);
+	printf("\n rsp : %llx\n", regs.rsp);
 	// printf(" ret : %lx\n\n", return_addr); // 0x0000555555555249
 	
 	/* PRINT STACK :
@@ -97,6 +97,7 @@ size_t *mbacktrace(pid_t child)
     // tester deadlock
     // afficher variables globales
     // breakpoint
+	// compter malloc / mmap (interposé mmap, stocker addr retour...)
 	// voir dl_iterate_pdhr
 
 	return arr_trace;
@@ -176,9 +177,8 @@ void print_signal(pid_t child)
 
 }
 
-int ldd(char *filename)
+int load_elf(char *filename, void **start)
 {
-	void* start = NULL;
 	int fd;
 	struct stat stat;
 
@@ -188,28 +188,42 @@ int ldd(char *filename)
 
 	fstat(fd, &stat);
 
-	start = mmap(0, stat.st_size, PROT_READ , MAP_FILE | MAP_SHARED, fd, 0);
-	if(start == MAP_FAILED)
+	*start = mmap(0, stat.st_size, PROT_READ , MAP_FILE | MAP_SHARED, fd, 0);
+	if(*start == MAP_FAILED)
 	{
 		perror("mmap");
 		abort();
 	}
+	close(fd);
 
 	Elf64_Ehdr* hdr = (Elf64_Ehdr *) start;
 
 	if(memcmp(hdr->e_ident, ELFMAG, SELFMAG))
 		printf("%s is not a valid elf file.", filename);
 
-	Elf64_Shdr* sections = (Elf64_Shdr *)((char *)start + hdr->e_shoff);
-
-	print_symtab(hdr, sections);
-	print_section_header(hdr, sections);
-
-	munmap(start, stat.st_size);
-	close(fd);
+	// print_symtab(hdr, sections);
+	// print_section_header(hdr, sections);
 
 	// -- readelf / nm / elfutils / libunwind
 
 	return 0;
 }
+
+int close_elf(char *filename, void** start)
+{
+	int fd;
+	struct stat stat;
+
+	fd = open(filename, O_RDONLY);
+	if(fd < 0)
+		perror("open");
+
+	fstat(fd, &stat);
+	close(fd);
+	munmap(*start, stat.st_size);
+
+	return 0;
+}
+
+
 
