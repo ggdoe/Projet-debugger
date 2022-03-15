@@ -6,9 +6,6 @@
 #include <elf.h>
 #include <signal.h>
 
-void print_symtab(Elf64_Ehdr* hdr, Elf64_Shdr* sections);
-void print_section_header(Elf64_Ehdr* hdr, Elf64_Shdr* sections);
-
 static inline void print_regs(struct user_regs_struct *regs){
 	printf( "R15 : %llx | R14 : %llx | R13 : %llx | R12 : %llx | RBP : %llx\n"
 			"RBX : %llx | R11 : %llx | R10 : %llx | R9  : %llx | R8  : %llx\n"

@@ -3,7 +3,7 @@ project("Projet AISE" C)
 
 include_directories("./include/")
 
-add_executable(db src/main.c src/print_symtab.c)
+add_executable(db src/main.c src/print_symtab.c src/fonction.c)
 
 add_executable(test_segv tests/segfault.c)
 add_executable(test_pm tests/+-.c)
