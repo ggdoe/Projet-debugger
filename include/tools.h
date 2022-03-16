@@ -2,23 +2,92 @@
 #define TOOLS_H_
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/user.h>
 #include <elf.h>
 #include <signal.h>
 
+static inline char *get_str_eflags(unsigned long long eflags){
+	char *str_eflags = malloc(48);
+	char *label[] = {"CF", "PF", "AF", "ZF", "SF", "TF", "IF", "DF", "OF", "IOPL", "NT", "RF", "VM"};
+	size_t bit_pos[] = {1<<0, 1<<2, 1<<4, 1<<6, 1<<7, 1<<8, 1<<9, 1<<10, 1<<11, 1<<12, 1<<14, 1<<16, 1<<17};
+
+	// !! IOPL est mal gérer voir wiki
+
+	int written = 0;
+	str_eflags[written++] = '['; // présentation comme gdb
+	str_eflags[written++] = ' ';
+
+	for(unsigned int i = 0; i < sizeof(label) / sizeof(char*); i++){
+		if((eflags & bit_pos[i]) == bit_pos[i]){
+
+			const char *lb = label[i];
+			// on copie à la main le label dans str_eflags
+			while(*lb != '\0'){
+				str_eflags[written++] = *(lb++);
+			}
+
+			str_eflags[written++] = ' ';
+		}
+	}
+	str_eflags[written++] = ']';
+	str_eflags[written] = '\0';
+	return str_eflags;
+}
+
 static inline void print_regs(struct user_regs_struct *regs){
-	printf( "R15 : %llx | R14 : %llx | R13 : %llx | R12 : %llx | RBP : %llx\n"
-			"RBX : %llx | R11 : %llx | R10 : %llx | R9  : %llx | R8  : %llx\n"
-			"RAX : %llx | RCX : %llx | RDX : %llx | RSI : %llx | RDI : %llx\n"
-			"ORIG_RAX : %llx | RIP : %llx | CS : %llx | EFLAGS : %llx\n"
-			"RSP : %llx | SS : %llx | FS_BASE : %llx | GS_BASE : %llx\n"
-			"DS : %llx | ES : %llx | FS : %llx | GS : %llx\n", 
-			regs->r15,regs->r14,regs->r13,regs->r12,regs->rbp,regs->rbx,
-			regs->r11,regs->r10,regs->r9,regs->r8,regs->rax,regs->rcx,
-			regs->rdx,regs->rsi,regs->rdi,regs->orig_rax,regs->rip,
-			regs->cs,regs->eflags,regs->rsp,regs->ss,regs->fs_base,
-			regs->gs_base,regs->ds,regs->es,regs->fs,regs->gs
-			);
+	printf("  %9s %#18llx %23llu\n", "orig_rax", regs->orig_rax, regs->orig_rax);
+	printf("  %9s %#18llx %23llu\n", "rax", regs->rax, regs->rax);
+	printf("  %9s %#18llx %23llu\n", "rbx", regs->rbx, regs->rbx);
+	printf("  %9s %#18llx %23llu\n", "rcx", regs->rcx, regs->rcx);
+	printf("  %9s %#18llx %23llu\n", "rdx", regs->rdx, regs->rdx);
+	printf("  %9s %#18llx %23llu\n", "rsi", regs->rsi, regs->rsi);
+	printf("  %9s %#18llx %23llu\n", "rdi", regs->rdi, regs->rdi);
+	printf("  %9s %#18llx %23llu\n", "rbp", regs->rbp, regs->rbp);
+	printf("  %9s %#18llx %23llu\n", "rsp", regs->rsp, regs->rsp);
+	printf("  %9s %#18llx %23llu\n", "r8", regs->r8, regs->r8);
+	printf("  %9s %#18llx %23llu\n", "r9", regs->r9, regs->r9);
+	printf("  %9s %#18llx %23llu\n", "r10", regs->r10, regs->r10);
+	printf("  %9s %#18llx %23llu\n", "r11", regs->r11, regs->r11);
+	printf("  %9s %#18llx %23llu\n", "r12", regs->r12, regs->r12);
+	printf("  %9s %#18llx %23llu\n", "r13", regs->r13, regs->r13);
+	printf("  %9s %#18llx %23llu\n", "r14", regs->r14, regs->r14);
+	printf("  %9s %#18llx %23llu\n", "r15", regs->r15, regs->r15);
+	printf("  %9s %#18llx %23llu\n", "rip", regs->rip, regs->rip);
+	printf("  %9s %#18llx %23llu\n", "fs_base", regs->fs_base, regs->fs_base);
+	printf("  %9s %#18llx %23llu\n", "gs_base", regs->gs_base, regs->gs_base);
+
+	char *str_eflags = get_str_eflags(regs->eflags);
+	printf("  %9s %#18llx %23s\n", "eflags", regs->eflags, str_eflags);
+	free(str_eflags);
+
+	printf("  %9s %#18llx %23llu\n", "cs", regs->cs, regs->cs);
+	printf("  %9s %#18llx %23llu\n", "ss", regs->ss, regs->ss);
+	printf("  %9s %#18llx %23llu\n", "ds", regs->ds, regs->ds);
+	printf("  %9s %#18llx %23llu\n", "es", regs->es, regs->es);
+	printf("  %9s %#18llx %23llu\n", "fs", regs->fs, regs->fs);
+	printf("  %9s %#18llx %23llu\n", "gs", regs->gs, regs->gs);
+}
+
+static inline void get_sh_flags(Elf64_Xword sh_flags, char* str_flags)
+{
+	// http://www.sco.com/developers/gabi/latest/ch4.sheader.html#sh_flags
+	size_t flags_type[] = {SHF_WRITE, SHF_ALLOC, SHF_EXECINSTR, SHF_MERGE, SHF_STRINGS, SHF_INFO_LINK, SHF_LINK_ORDER, SHF_OS_NONCONFORMING, SHF_GROUP, SHF_TLS, SHF_COMPRESSED, SHF_MASKOS, SHF_MASKPROC};
+	char flags_letter[] = {'W', 'A', 'X', 'M', 'S', 'I', 'L', 'O', 'G', 'T', 'C', 'o', 'm'};
+	int written = 0;
+
+	// on parcours tous les flags
+	for(unsigned int i = 0; i < sizeof(flags_letter); i++){
+		// on test si "flags_type[i]" est dans sh_flags
+		if((sh_flags & flags_type[i]) == flags_type[i]) 
+			// si oui on ajoute son symbole à str_flags
+			str_flags[written++] = flags_letter[i]; 
+		
+		// str_flags ne comporte que 4 éléments max dont \0 
+		if(written > 3) break;
+	}
+	// on null-termine str_flags
+	str_flags[written] = '\0';
 }
 
 static inline const char* get_sh_type(Elf64_Word sh_type){

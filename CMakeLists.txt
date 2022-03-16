@@ -13,7 +13,7 @@ target_link_libraries(db dl)
 target_compile_options(db PRIVATE
                         -Wall -Wextra -pedantic
                         -Wno-unused-result
-                        -ldl
+                        # -ldl
 						# -g
                         # -O3
                         )

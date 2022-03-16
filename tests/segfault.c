@@ -15,12 +15,12 @@ int foo(){
 	int *a;
 	int *b = malloc(SIZE * sizeof(int));
 
-	// void *buff[1024];
-	// char **bt_sym;
-	// int sz = backtrace(buff, 1024);
-	// bt_sym = backtrace_symbols(buff, sz);
-	// for(int i = 0; i < sz; i++)
-	// 	printf("%016llx \t %s\n", buff[i], bt_sym[i]);
+	void *buff[1024];
+	char **bt_sym;
+	int sz = backtrace(buff, 1024);
+	bt_sym = backtrace_symbols(buff, sz);
+	for(int i = 0; i < sz; i++)
+		printf("%016llx \t %s\n", buff[i], bt_sym[i]);
 
 	b[1] = 1/0;
 	// b[1] = 0./0.; // is OK

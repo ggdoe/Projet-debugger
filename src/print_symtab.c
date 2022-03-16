@@ -47,10 +47,62 @@ void print_section_header(void *start){
 	// pour afficher le nom de la section
 	sh_strtab = (char*)((char*)start + sections[hdr->e_shstrndx].sh_offset);
 	
+	printf("%4s  %-17s %-16s %-16s %-6s %-6s %s\n",
+		"[Nr]", "Name", "Type", "Address", "Off", "Size", "ES Flg Lk Inf Al");
+	
+	for (int i = 0; i < hdr->e_shnum; i++){
+		char str_flags[4];
+		get_sh_flags(sections[i].sh_flags, str_flags);
+
+		printf("[%2d] %-17.17s  %-16s %016lx %06lx %06lx %02lx %3s %2d %3d %2ld\n", 
+				i, 
+				sh_strtab + sections[i].sh_name, 
+				get_sh_type(sections[i].sh_type), 
+				sections[i].sh_addr, 
+				sections[i].sh_offset, 
+				sections[i].sh_size, 
+				sections[i].sh_entsize,
+				str_flags, 
+				sections[i].sh_link, 
+				sections[i].sh_info, 
+				sections[i].sh_addralign
+				);
+				
+		// https://github.com/adugast/read_elf/blob/master/src/main.c#L83
+		// https://hub.packtpub.com/understanding-elf-specimen/
+
+	}
+}
+
+void print_elf_header(void *start){
+	// const Elf64_Ehdr* hdr = (Elf64_Ehdr *) start;
+	// // hdr->
+
+	// printf("[Nr] Name              Type             Address           Offset\n");
+	// printf("     Size              EntSize          Flags  Link  Info  Align\n");
+	// for (int i = 0; i < hdr->e_shnum; i++){
+	// 	printf("[%2d] %-16.16s  %-16s %016lx  %08lx\n", 
+	// 		i, sh_strtab + sections[i].sh_name, get_sh_type(sections[i].sh_type), 
+	// 							sections[i].sh_addr, sections[i].sh_offset);
+		// printf(""); 
+		// https://github.com/adugast/read_elf/blob/master/src/main.c#L83
+		// https://hub.packtpub.com/understanding-elf-specimen/
+
+	// }
+}
+void print_reloc_table(void *start){
+	char *sh_strtab;
+	Elf64_Ehdr* hdr = (Elf64_Ehdr *) start;
+	Elf64_Shdr* sections = (Elf64_Shdr *)((char *)start + hdr->e_shoff);
+
+	// pour afficher le nom de la section
+	sh_strtab = (char*)((char*)start + sections[hdr->e_shstrndx].sh_offset);
+	
 	printf("[Nr] Name              Type             Address           Offset\n");
 	printf("     Size              EntSize          Flags  Link  Info  Align\n");
 	for (int i = 0; i < hdr->e_shnum; i++){
-		printf("[%2d] %-16.16s  %-16s %016lx  %08lx\n", i, sh_strtab + sections[i].sh_name, get_sh_type(sections[i].sh_type), 
+		printf("[%2d] %-16.16s  %-16s %016lx  %08lx\n", 
+			i, sh_strtab + sections[i].sh_name, get_sh_type(sections[i].sh_type), 
 								sections[i].sh_addr, sections[i].sh_offset);
 		// printf(""); 
 		// https://github.com/adugast/read_elf/blob/master/src/main.c#L83
@@ -58,3 +110,4 @@ void print_section_header(void *start){
 
 	}
 }
+

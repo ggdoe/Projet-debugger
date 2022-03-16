@@ -1,7 +1,10 @@
 #include "fonctions.h"
 
-
-size_t get_maps_struct(pid_t child, struct maps **maps) //double pointeur necessaire sinon segfault
+// Parse /proc/pid/maps dans une structure struct *maps
+// in : pid child
+// out : *maps
+// return : size maps
+size_t get_maps_struct(pid_t child, struct maps **maps)
 {
 	char path_maps[24];
 	snprintf(path_maps, 20, "/proc/%d/maps", child);
@@ -35,7 +38,7 @@ size_t get_maps_struct(pid_t child, struct maps **maps) //double pointeur necess
 
 		// on parse la ligne de /proc/maps
 		sscanf(buff, "%12lx-%12lx %*s %08lx %*s %*s %s", 
-			&(*maps)[i].addr_start, 
+			&(*maps)[i].addr_start, // on remplit 
 			&(*maps)[i].addr_end, 
 			&offs, // on pourrait récupérer offset dans la struct
 			buff_pathname
@@ -49,13 +52,12 @@ size_t get_maps_struct(pid_t child, struct maps **maps) //double pointeur necess
 	}
 
 	return i; // on renvoie le nombre d'element écrit dans struct maps
-	return 0;
 }
 
-void free_maps_struct(struct maps *maps, size_t size_maps){
+void free_maps_struct(struct maps **maps, size_t size_maps){
 	for(size_t i = 0; i < size_maps; i++)
-		free(maps[i].pathname); // on free le strdup()
-	free(maps);
+		free((*maps)[i].pathname); // on free le strdup()
+	free(*maps);
 }
 
 void print_maps(pid_t child)
@@ -79,34 +81,24 @@ void print_maps(pid_t child)
 	close(fd_maps);
 }
 
-size_t *mbacktrace(pid_t child)
+size_t *mbacktrace(pid_t child, struct user_regs_struct *regs)
 {
-	struct maps *smaps;
-	size_t size_maps = get_maps_struct(child, &smaps);
-	size_t mem_maps_off = smaps[0].addr_start;
-	free_maps_struct(smaps, size_maps);
+	// struct maps *smaps;
+	// size_t size_maps = get_maps_struct(child, &smaps);
+	// size_t mem_maps_off = smaps[0].addr_start;
+	// free_maps_struct(&smaps, size_maps);
 
 	// struct stat stat;
 	// fstat(fd_maps, &stat);
 	// printf("stat.st_size : %ld", stat.st_size);
 	
-	// voir dladdr() 
-
 	size_t *arr_trace = malloc(128 * sizeof(size_t));
 
 	long return_addr;
 	long rbp;
-
-	struct user_regs_struct regs;
 	
-	// on recupere les registres du child
-	if(ptrace(PTRACE_GETREGS, child, NULL, &regs) < 0){
-		perror("ptrace(GETREGS)");
-		exit(1);
-	}
-	
-	arr_trace[0] = regs.rip;
-	rbp = regs.rbp;
+	arr_trace[0] = regs->rip;
+	rbp = regs->rbp;
 
 	int i = 0;
 	while(rbp != 0)
@@ -116,48 +108,46 @@ size_t *mbacktrace(pid_t child)
 		if((rbp == -1 || return_addr == -1) && errno ){ // catch erreur probable
 			perror("ptrace PEEK_DATA");
 		}
+		
 		arr_trace[++i] = return_addr;
-		// if(return_addr < 0x700000000000)
-		// 	arr_trace[i] -= mem_maps_off;
-
 	}
 
 	arr_trace[++i] = -1; // fin du tab : 0xffffff...
 	
-	printf("\nbacktrace :\n");
-	for(int j = 0; j < i; j++){
-		printf("0x%lx (+0x%lx)\n", arr_trace[j], arr_trace[j] - mem_maps_off);
-	}
+	// printf("\nbacktrace :\n");
+	// for(int j = 0; j < i; j++){
+	// 	printf("0x%lx (+0x%lx)\n", arr_trace[j], arr_trace[j] - mem_maps_off);
+	// }
 
-	printf("\n rip : %llx", regs.rip);
-	printf("\n rbp : %llx", regs.rbp);
-	printf("\n rsp : %llx\n", regs.rsp);
+	// printf("\n rip : %llx", regs.rip);
+	// printf("\n rbp : %llx", regs.rbp);
+	// printf("\n rsp : %llx\n", regs.rsp);
 	// printf(" ret : %lx\n\n", return_addr); // 0x0000555555555249
 	
-	/* PRINT STACK :
-	for(int i = -15; i < 15; i++){
-		return_addr = ptrace(PTRACE_PEEKDATA, child, regs.rbp + 8*i, NULL);
-		printf("\n %llx - %16lx", regs.rbp + 8*i, return_addr);
-		// return_addr = ptrace(PTRACE_PEEKDATA, child, regs.rbp + 8*i+4, NULL);
-		// printf("\n %llx - %16lx -", regs.rbp + 8*i+4, return_addr);
-		if(i == 0) printf(" <--");
-	}
-	printf("\n");
-	*/
-
-	///////TODO OR DID
-	// chercher dans quelle fonction est rip, puis peek new_rbp
-	// chercher dans quelle fonction est return_addr, etc
-
-	// ajouter fonction print stackframe (de la mm facon que gdb)
-    // tester deadlock
-    // afficher variables globales
-    // breakpoint
-	// compter malloc / mmap (interposé mmap, stocker addr retour...)
-	// voir dl_iterate_pdhr
-	// explorer /proc/pid/ avec dir_ent voir TD ls
-
 	return arr_trace;
+}
+
+void print_stack(pid_t child, long rsp, long rbp, long max)
+{
+	long value;
+
+	printf("%16s %16s %16s", "Addr", "Hex", "Dec");
+	
+	// on parcours la stack, de rsp jusqu'à max
+	for(long i = rsp; i < max; i += 8){
+		value = ptrace(PTRACE_PEEKDATA, child, i, NULL);
+		if((value == -1) && errno ) // catch erreur probable
+			perror("ptrace PEEK_DATA");
+		
+		// on affiche la valeurs en Hex et en Dec
+		printf("\n%16lx %16lx %16ld", i, value, value);
+
+
+		if(i == rbp){
+			printf(" <-- rbp"); // on precise où sont les rbp
+			rbp = value;
+		}
+	}
 }
 
 pid_t exec_child(char *args[])
@@ -177,61 +167,46 @@ pid_t exec_child(char *args[])
 			exit(1);
 		}
 	}
+	wait(NULL); // on attend le sigtrap
 	return child;
 }
 
-/*
-	Avance l'etat du child jusqu'à la reception d'un signal
-		puis donne les infos de ce signal
-		puis essaye de continuer l'execution
-*/
-void print_signal(pid_t child)
-{
-	const int MAX_LOOP = 10;
-	struct user_regs_struct regs, old_regs;
-	siginfo_t siginfo, old_siginfo;
+int continue_exec(pid_t child, struct user_regs_struct *regs){
 	int status;
+	ptrace(PTRACE_CONT, child, 0,0);
+	wait(&status);
 
-	for(int i = 0; i < MAX_LOOP; i++){
-		old_regs = regs;
-		old_siginfo = siginfo;
-
-		ptrace(PTRACE_CONT, child, 0,0);
-		wait(&status);
-
-		if (WIFEXITED(status))
-			return;
-
-		if(ptrace(PTRACE_GETSIGINFO, child, NULL, &siginfo) < 0){
-			perror("ptrace(GETSIGINFO)");
-			exit(1);
-		}
-
-		if(ptrace(PTRACE_GETREGS, child, NULL, &regs) < 0){
-			perror("ptrace(GETREGS)");
-			exit(1);
-		}
-
-		//probablement useless, plus tard
-		if(	!memcmp(&regs, &old_regs, sizeof(struct user_regs_struct)) &&
-			!memcmp(&siginfo, &old_siginfo, sizeof(siginfo_t)) )
-		{
-			// on break car le child est bloqué au même endroit 
-			//	que l'itération précédente
-			break;
-		}
-
-		printf("signal : %s   |   errno : %s   |   code : %d\n", 
-						strsignal(siginfo.si_signo), 
-						strerror(siginfo.si_errno), 
-						siginfo.si_code);
-
-		print_si_code(&siginfo);
-
-		// print_regs(&regs);
-		printf("\n%llx\n\n", regs.rip);
+	if (WIFEXITED(status)){
+		printf("Child finish.\n");
+		return 0;
 	}
 
+	// on recupere les registres du child
+	if(ptrace(PTRACE_GETREGS, child, NULL, regs) < 0){
+		perror("ptrace(GETREGS)");
+		exit(1);
+	}
+
+	return 1;
+}
+
+void print_signal(pid_t child)
+{
+	siginfo_t siginfo;
+
+	if(ptrace(PTRACE_GETSIGINFO, child, NULL, &siginfo) < 0){
+		perror("ptrace(GETSIGINFO)");
+		exit(1);
+	}
+
+	printf("\n%-40s %16s %16s\n", "Signal :", "errno :", "code :");
+	printf("%-40s %16s %16d\n", 
+			strsignal(siginfo.si_signo), 
+			strerror(siginfo.si_errno), 
+			siginfo.si_code
+			);
+	print_si_code(&siginfo);
+	printf("\n");
 }
 
 int load_elf(char *filename, void **start)
@@ -253,15 +228,10 @@ int load_elf(char *filename, void **start)
 	}
 	close(fd);
 
-	Elf64_Ehdr* hdr = (Elf64_Ehdr *) start;
+	Elf64_Ehdr* hdr = (Elf64_Ehdr *) *start;
 
 	if(memcmp(hdr->e_ident, ELFMAG, SELFMAG))
 		printf("%s is not a valid elf file.", filename);
-
-	// print_symtab(hdr, sections);
-	// print_section_header(hdr, sections);
-
-	// -- readelf / nm / elfutils / libunwind
 
 	return 0;
 }

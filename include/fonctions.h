@@ -34,19 +34,27 @@ struct maps {
 	char *pathname;
 };
 
+//
+void init_input();
+char event_key();
+//
+
 pid_t exec_child(char *args[]);
+int continue_exec(pid_t child, struct user_regs_struct *regs);
 
 int load_elf(char *filename, void **start);
 int close_elf(char *filename, void **start);
 
-size_t *mbacktrace(pid_t child);
 void print_signal(pid_t child);
+
+size_t *mbacktrace(pid_t child, struct user_regs_struct *regs);
+void print_stack(pid_t child, long rsp, long rbp, long max);
 
 void print_symtab(void *start);
 void print_section_header(void *start);
 
 size_t get_maps_struct(pid_t child, struct maps **maps);
-void free_maps_struct(struct maps *maps, size_t size_maps);
+void free_maps_struct(struct maps **maps, size_t size_maps);
 void print_maps(pid_t child);
 
 #endif
