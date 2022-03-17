@@ -57,7 +57,7 @@ void start_interposition()
 		// on veut pas les @@  (ex : malloc@@GLIBC_2.2.5)
 		for(size_t j = 0;; j++){
 			buff[j] = str_dyn[i][j]; // copie j-eme caractère
-			if(buff[j] == '@'){
+			if(buff[j] == '@' || buff[j] == '\0'){
 				buff[j] = '\0';
 				break;
 			}

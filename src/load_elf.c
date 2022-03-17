@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 void *load_elf(char *filename)
 {
@@ -66,9 +67,14 @@ char **get_shared_func(void *start, size_t *size_arr)
 
 	shared_funcs = (char**) malloc(size_alloc * sizeof(char*));
 
+	bool found = false;
+	Elf64_Word tabletype = SHT_SYMTAB;
+
+	redo:
 	for (int i = 0; i < hdr->e_shnum; i++){
-		if (sections[i].sh_type == SHT_SYMTAB /*|| sections[i].sh_type == SHT_DYNSYM*/) 
+		if (sections[i].sh_type == tabletype) 
 		{
+			found = true;
 			symtab = (Elf64_Sym *)((char *)start + sections[i].sh_offset);
 			nb_symbols = sections[i].sh_size / sections[i].sh_entsize;
 			strtab = (char*)((char*)start + sections[sections[i].sh_link].sh_offset);
@@ -86,6 +92,12 @@ char **get_shared_func(void *start, size_t *size_arr)
 			}
 		}
 	}
+	if(!found){// si on a pas trouver la table des symboles
+		tabletype = SHT_DYNSYM; // on cherche la table des symboles dynamique
+		found = true; // true pour eviter boucle infini si il n'y a pas de table des symboles
+		goto redo;
+	}
+
 	return shared_funcs;
 }
 

@@ -51,9 +51,10 @@ void print_all_func(void *start, size_t *addr_dyn, struct maps *maps, size_t siz
 	for(size_t i = 0; i < size_arr; i++){
 		char buff[128];
 		// on veut pas les @@  (ex : malloc@@GLIBC_2.2.5)
+		// on copie donc a la main jusqu'a tomber sur 
 		for(size_t j = 0;; j++){
 			buff[j] = str_func[i][j]; // copie j-eme caractère
-			if(buff[j] == '@'){
+			if(buff[j] == '@' || buff[j] == '\0'){
 				buff[j] = '\0';
 				break;
 			}
