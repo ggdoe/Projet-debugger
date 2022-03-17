@@ -6,6 +6,7 @@
 #include <sys/user.h>
 #include <elf.h>
 #include <signal.h>
+#include <string.h>
 
 static inline char *get_str_eflags(unsigned long long eflags){
 	char *str_eflags = malloc(48);
@@ -234,7 +235,7 @@ static inline void print_si_code(siginfo_t *siginfo)
 				default: printf("-- siginfo.si_code (%d) UNKNOWN", siginfo->si_code);
 			}
 			break;
-		// si_code for SIGTRAP undefined
+		// si_code for SIGTRAP undefined (?)
 		/*
 		case SIGTRAP:
 			switch(siginfo->si_code){

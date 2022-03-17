@@ -35,15 +35,25 @@ struct maps {
 };
 
 //
-void init_input();
-char event_key();
+// void init_input();
+// char event_key();
 //
+
+void sig_handle(int sig);
 
 pid_t exec_child(char *args[]);
 int continue_exec(pid_t child, struct user_regs_struct *regs);
 
-int load_elf(char *filename, void **start);
-int close_elf(char *filename, void **start);
+size_t *get_addr_dyn(void *start);
+char **get_shared_func(void *start, size_t *size_arr);
+char **get_local_func(void *start, size_t **addr_value, size_t *size_arr);
+void print_all_func(void *start, size_t * addr_dyn, struct maps *maps, size_t size_maps);
+char *addr_to_func_name(size_t addr, void *start, size_t *addr_dyn, struct maps *maps, size_t *offset);
+
+void *load_elf(char *filename);
+void close_elf(char *filename, void *start);
+
+void print_ldd(char *args[]);
 
 void print_signal(pid_t child);
 
@@ -53,8 +63,8 @@ void print_stack(pid_t child, long rsp, long rbp, long max);
 void print_symtab(void *start);
 void print_section_header(void *start);
 
-size_t get_maps_struct(pid_t child, struct maps **maps);
+struct maps *get_maps_struct(pid_t child, size_t *size_arr);
 void free_maps_struct(struct maps **maps, size_t size_maps);
-void print_maps(pid_t child);
+void print_file(char *path);
 
 #endif

@@ -1,3 +1,6 @@
+// #define _GNU_SOURCE         /* See feature_test_macros(7) */
+// #include <dlfcn.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -15,12 +18,15 @@ int foo(){
 	int *a;
 	int *b = malloc(SIZE * sizeof(int));
 
-	void *buff[1024];
-	char **bt_sym;
-	int sz = backtrace(buff, 1024);
-	bt_sym = backtrace_symbols(buff, sz);
-	for(int i = 0; i < sz; i++)
-		printf("%016llx \t %s\n", buff[i], bt_sym[i]);
+	// void *buff[1024];
+	// char **bt_sym;
+	// int sz = backtrace(buff, 1024);
+	// bt_sym = backtrace_symbols(buff, sz);
+	// for(int i = 0; i < sz; i++)
+	// 	printf("%16p \t %s\n", buff[i], bt_sym[i]);
+
+	// void *addr_lib_start = dlsym(RTLD_DEFAULT, "__libc_start_main");
+	// printf("%p - %p --> %#lx\n", buff[sz-2], addr_lib_start, buff[sz-2] - addr_lib_start);
 
 	b[1] = 1/0;
 	// b[1] = 0./0.; // is OK
