@@ -45,6 +45,8 @@ pid_t exec_child(char *args[]);
 int continue_exec(pid_t child, struct user_regs_struct *regs);
 
 size_t *get_addr_dyn(void *start);
+void free_addr_dyn(size_t *addr_dyn);
+
 char **get_shared_func(void *start, size_t *size_arr);
 char **get_local_func(void *start, size_t **addr_value, size_t *size_arr);
 void print_all_func(void *start, size_t * addr_dyn, struct maps *maps, size_t size_maps);

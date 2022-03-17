@@ -89,6 +89,7 @@ char **get_shared_func(void *start, size_t *size_arr)
 	return shared_funcs;
 }
 
+// TODO à deplacer autre part
 char **get_local_func(void *start, size_t **addr_value, size_t *size_arr)
 {
 	int nb_symbols;

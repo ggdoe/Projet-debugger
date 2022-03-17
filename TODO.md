@@ -6,22 +6,11 @@
  - utiliser dladdr : fork execve preload .so constructor mmap shared
 
 
- ###### DONE
- - ordonner l'addr des func dans la table des sym
- - au runtime execve dlsym des func dont addr = 0x0000.. (ou juste celles de .dynsym)
- - utiliser ces addr pour donner le nom des fonction dans backtrace && rip
-
- - fonction get_runtime_addr()
-    -- struct partagée
-  - mmap fd (out.data) shared
-	- 4 octet : nombre de func (avec addr = 0x000..)
-	- liste des nom de fonctions
-  - child fstat mmap out.data
-	- mmap in.data shared
-	- retourne liste des addr dans l'ordre
-  - pere waitpid()
-	mmap in.data read malloc (pour free plus simple)
- ######
+#####
+ - lister les variable globale 
+  - table des symbole -> type OBJECT, bind GLOBAL
+  - recupérer aussi la size
+###
 
 # print_symtab.c
  - changer le nom du fichier
@@ -47,3 +36,4 @@
 
 # tools.h
  - de nombreuses fonctions ont rien à foutre dans un .h
+  - VIRER LES STATIC INLINES DE 9000 OCTETS

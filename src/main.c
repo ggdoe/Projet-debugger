@@ -105,6 +105,7 @@ int main()
 
 	kill(child, SIGKILL);
 	free_maps_struct(&maps, size_maps);
+	free_addr_dyn(addr_dyn);
 	close_elf(*args, &start);
 	return 0;
 }

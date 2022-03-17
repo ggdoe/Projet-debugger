@@ -7,6 +7,7 @@
 #include <execinfo.h>
 
 #define SIZE 10
+int MA_VAR_GLOBALE = 10;
 
 int bar(int *b);
 
@@ -27,10 +28,10 @@ int foo(){
 
 	// void *addr_lib_start = dlsym(RTLD_DEFAULT, "__libc_start_main");
 	// printf("%p - %p --> %#lx\n", buff[sz-2], addr_lib_start, buff[sz-2] - addr_lib_start);
-
+	MA_VAR_GLOBALE++;
 	b[1] = 1/0;
 	// b[1] = 0./0.; // is OK
-	b[2] = mysqr(4);
+	b[2] = mysqr(MA_VAR_GLOBALE);
 	b[SIZE/2] = *a;
 	raise(SIGUSR1);
 	bar(b);

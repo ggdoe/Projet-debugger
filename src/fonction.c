@@ -49,7 +49,16 @@ void print_all_func(void *start, size_t *addr_dyn, struct maps *maps, size_t siz
 
 	printf("Fonctions dynamiques : \n");
 	for(size_t i = 0; i < size_arr; i++){
-		printf("  %-35s  %-#20lx ", str_func[i], addr_dyn[i]);
+		char buff[128];
+		// on veut pas les @@  (ex : malloc@@GLIBC_2.2.5)
+		for(size_t j = 0;; j++){
+			buff[j] = str_func[i][j]; // copie j-eme caractère
+			if(buff[j] == '@'){
+				buff[j] = '\0';
+				break;
+			}
+		}
+		printf("  %-35s  %-#20lx ", buff, addr_dyn[i]);
 		for(size_t j = 0; j < size_maps; j++){
 			if(maps[j].addr_start <= addr_dyn[i] && addr_dyn[i] < maps[j].addr_end)
 				printf("%s", maps[j].pathname);
@@ -98,16 +107,28 @@ size_t *get_addr_dyn(void *start){
 		abort();
 	}
 
-	// TODO free addr_dyn plus tard
-	// munmap(addr_dyn, size_arr * sizeof(size_t));
-
 	// on supprime le fichier de communication
-	unlink("addr.data");
-	
+
 	close(fd);
 	free(str_dyn);
 	return addr_dyn;
 }
+
+void free_addr_dyn(size_t *addr_dyn)
+{
+	int fd = open("addr.data", O_RDWR, 0600);
+	if(fd < 0){
+		perror("open addr.data");
+		exit(1);
+	}
+	struct stat stat;
+	fstat(fd, &stat);
+	close(fd);
+	
+	munmap(addr_dyn, stat.st_size);
+	unlink("addr.data");
+}
+
 
 // Parse /proc/pid/maps dans une structure struct *maps
 struct maps *get_maps_struct(pid_t child, size_t *size_arr)
