@@ -10,6 +10,11 @@
  - lister les variable globale 
   - table des symbole -> type OBJECT, bind GLOBAL
   - recupérer aussi la size
+ - dire dans quelle fonction est rip à la place de sa valeur en hex
+ - faire une struct* {size_t addr, char* name}, pour addr_to_name 
+ - mettre qqlq variable (genre start, hdr, regs, ...) en global pour eviter les parametre de fonction à ralonge, éventuellement en mettre qqlq une extern mais jpense pas
+ - faire une fonction pour init (malloc des variables globales)
+ - faire une fonction pour tous free
 ###
 
 # print_symtab.c

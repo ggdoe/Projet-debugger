@@ -23,6 +23,7 @@
 
 #include "tools.h"
 
+// a bouger dans le .c
 struct maps {
 	size_t addr_start;
 	size_t addr_end;
@@ -66,7 +67,7 @@ void print_symtab(void *start);
 void print_section_header(void *start);
 
 struct maps *get_maps_struct(pid_t child, size_t *size_arr);
-void free_maps_struct(struct maps **maps, size_t size_maps);
+void free_maps_struct(struct maps *maps, size_t size_maps);
 void print_file(char *path);
 
 #endif

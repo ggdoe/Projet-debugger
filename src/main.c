@@ -12,6 +12,7 @@ int main()
 	struct user_regs_struct regs;
 	size_t *addr_dyn; // addr des fonctions lib dynamic
 	
+	// init_db(args) qui appel ces 3 fonctions
 	child = exec_child(args);
 	start = load_elf(*args); // start est l'adresse du elf
 	addr_dyn = get_addr_dyn(start);
@@ -19,6 +20,8 @@ int main()
 	signal(SIGINT, sig_handle); // on catch ^C
 
 	printf("%s", usage);
+
+	// à virer
 	if(ptrace(PTRACE_GETREGS, child, NULL, &regs) < 0){
 		perror("ptrace(GETREGS)");
 		exit(1);
@@ -104,7 +107,7 @@ int main()
 	}
 
 	kill(child, SIGKILL);
-	free_maps_struct(&maps, size_maps);
+	free_maps_struct(maps, size_maps);
 	free_addr_dyn(addr_dyn);
 	close_elf(*args, &start);
 	return 0;

@@ -181,10 +181,10 @@ struct maps *get_maps_struct(pid_t child, size_t *size_arr)
 	return maps; // on renvoie le nombre d'element écrit dans struct maps
 }
 
-void free_maps_struct(struct maps **maps, size_t size_maps){
+void free_maps_struct(struct maps *maps, size_t size_maps){
 	for(size_t i = 0; i < size_maps; i++)
-		free((*maps)[i].pathname); // on free le strdup()
-	free(*maps);
+		free(maps[i].pathname); // on free le strdup()
+	free(maps);
 }
 
 void print_file(char *path)
@@ -316,8 +316,9 @@ pid_t exec_child(char *args[])
 		exit(1);
 	}
 	wait(NULL); // on attend le sigtrap de PTRACE_ME
-	ptrace(PTRACE_CONT, child, 0,0); // on continue pour chargé la lib interposé
-	wait(NULL); // on attend le signal quand la lib interposé aura fini
+	ptrace(PTRACE_SETOPTIONS, child, 0, PTRACE_O_EXITKILL);
+	ptrace(PTRACE_CONT, child, 0,0); // continue pour charger la lib interposée
+	wait(NULL); // on attend le signal quand la lib interposée aura fini
 	return child;
 }
 
