@@ -24,7 +24,7 @@ int main(){
 	}
 	close(fd);
 
-    FILE *out_h = fopen("../libinter.h", "w");
+    FILE *out_h = fopen("../include/libinter.h", "w");
     fprintf(out_h, "#define SIZE_LIBINTER %ld\n", stat.st_size);
     fprintf(out_h, "#define DATA_LIBINTER \"");
 
@@ -35,4 +35,5 @@ int main(){
     }
     fprintf(out_h, "\"\n");
     fclose(out_h);
+    unlink("libinterposition.so");
 }
