@@ -15,6 +15,7 @@
  - mettre qqlq variable (genre start, hdr, regs, ...) en global pour eviter les parametre de fonction à ralonge, éventuellement en mettre qqlq une extern mais jpense pas
  - faire une fonction pour init (malloc des variables globales)
  - faire une fonction pour tous free
+ - unlink "addr.data" plus tôt
 ###
 
 # print_symtab.c

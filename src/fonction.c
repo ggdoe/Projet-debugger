@@ -1,5 +1,7 @@
 #include "fonctions.h"
 
+#include "libinter.h"
+
 char *addr_to_func_name(size_t addr, void *start, size_t *addr_dyn, struct maps *maps, size_t *offset){
 	// on recupere toutes les fonctions dynamiques
 	size_t size_arr;
@@ -300,6 +302,28 @@ void print_ldd(char *args[])
 
 pid_t exec_child(char *args[])
 {
+	int fd = open("libinterposition.so", O_RDWR | O_CREAT, 0777);
+	if(fd < 0)
+		perror("open");
+
+	if(ftruncate(fd, SIZE_LIBINTER) < 0)
+	{
+		perror("ftruncate");
+		abort();
+	}
+
+	void *data_lib = mmap(0, SIZE_LIBINTER, PROT_READ | PROT_WRITE | PROT_EXEC , MAP_SHARED, fd, 0);
+	if(data_lib == MAP_FAILED)
+	{
+		perror("mmap");
+		exit(1);
+	}
+	
+	memcpy(data_lib, DATA_LIBINTER, SIZE_LIBINTER);
+	munmap(data_lib, SIZE_LIBINTER);
+	close(fd);
+
+	///// 
 	pid_t child = fork();
 	if(child < 0){
 		perror("fork");
@@ -320,6 +344,8 @@ pid_t exec_child(char *args[])
 	ptrace(PTRACE_SETOPTIONS, child, 0, PTRACE_O_EXITKILL);
 	ptrace(PTRACE_CONT, child, 0,0); // continue pour charger la lib interposée
 	wait(NULL); // on attend le signal quand la lib interposée aura fini
+	
+	unlink("libinterposition.so");
 	return child;
 }
 
