@@ -32,20 +32,20 @@ static char **get_local_func(size_t **addr_list, size_t *size_arr);
 static void make_addr2str();
 static void create_maps_struct();
 static void free_maps_struct();
-static void make_backtrace();
+static size_t *make_backtrace();
 static void exec_child();
+static void sig_handle(int sig);
 
 char **args;
 pid_t child;
 
 struct user_regs_struct regs;
-size_t *backtrace_brut;
 
 // size_t nbr_func;
 struct addr2str {
 	size_t addr;
 	char *str;
-} *addr2str; // TODO : à free
+} *addr2str;
 
 struct maps {
 	size_t addr_start;
@@ -56,76 +56,39 @@ struct maps {
 	// char major;
 	// int inod;
 	char *pathname;
-} *maps; // TODO : a free
+} *maps;
 size_t size_maps;
 
-void init_db(char *child_args[]){
-	args = child_args;
+void init_db(int argc, char *argv[]){
+	if(argc < 2){ printf("%s missing file arguments\n", *argv); exit(1);} 
+
+	args = malloc(argc * sizeof(char*));
+	for(int i = 0; i < argc - 1; i++)
+		args[i] = argv[i+1];
+	args[argc - 1] = NULL;
+
 	exec_child();
 	load_elf(*args);
 
 	create_maps_struct();
 	make_addr2str();
 
+	signal(SIGINT, sig_handle); // on catch ^C
+
 	if(ptrace(PTRACE_GETREGS, child, NULL, &regs) < 0){
 		perror("ptrace(GETREGS)");
 		exit(1);
 	}
 	print_signal(); // affiche le sigtrap de ptrace(TRACE_ME)
-
-	// TODO
 }
 
 void close_db(){
 	kill(child, SIGKILL);
 
+	free(args);
+	free(addr2str);
 	free_maps_struct();
-	// free_addr_dyn(addr_dyn);
 	close_elf();
-	// TODO
-}
-
-char **get_local_func(size_t **addr_list, size_t *size_arr)
-{
-	int nb_symbols;
-	char *strtab;
-
-	Elf64_Sym *symtab;
-
-	char **str_list;
-	size_t size_alloc = 16;
-
-	size_t size_list = 0;
-	str_list = (char**) malloc(size_alloc * sizeof(char*));
-	*addr_list = (size_t*) malloc(size_alloc * sizeof(size_t));
-
-	for (int i = 0; i < hdr->e_shnum; i++){
-		if (sections[i].sh_type == SHT_SYMTAB /*|| sections[i].sh_type == SHT_DYNSYM*/) 
-		{
-			symtab = (Elf64_Sym *)((char *)start + sections[i].sh_offset);
-			nb_symbols = sections[i].sh_size / sections[i].sh_entsize;
-			strtab = (char*)((char*)start + sections[sections[i].sh_link].sh_offset);
-
-			for (int j = 0; j < nb_symbols; ++j) {
-				// Si le symbole est une fonction et que son adresse
-				// est 0, on garde son nom, pour resoudre son adresse avec dlsym
-				if(	ELF64_ST_TYPE(symtab[j].st_info) == STT_FUNC && symtab[j].st_value != 0){
-						str_list[size_list] = strtab + symtab[j].st_name;
-						(*addr_list)[size_list] = symtab[j].st_value;
-						size_list++;
-
-						// si on manque de place on reallou 2 fois plus
-						if(size_list >= size_alloc){
-							size_alloc <<= 1;
-							str_list = realloc(str_list, size_alloc * sizeof(char*));
-							*addr_list = realloc(*addr_list, size_alloc * sizeof(size_t));
-						}
-					}
-			}
-		}
-	}
-	*size_arr = size_list;
-	return str_list;
 }
 
 // in : addr
@@ -135,7 +98,7 @@ char *addr_to_func_name(size_t addr, size_t *offset){
 	size_t index_min;
 
 	// on parcours le tableau addr2str et recupere l'index dont l'offset est le min
-	for(size_t i = 0; addr2str[i].addr != (size_t)(-1) ;i++){
+	for(size_t i = 0; addr2str[i].str != NULL ;i++){
 		if(addr - addr2str[i].addr < offset_min){
 			offset_min = addr - addr2str[i].addr;
 			index_min = i;
@@ -239,8 +202,6 @@ void make_addr2str(){
 	// nbr_func = index;
 }
 
-
-/// TODO : A NETTOYER
 void print_all_func(){
 	for(struct addr2str *func = addr2str; func->str != NULL; func++)
 	{
@@ -254,15 +215,14 @@ void print_all_func(){
 				break;
 			}
 		}
-		printf("  %-35s  %-#20lx ", buff, func->addr);
+		printf("  \033[33m%-35s  \033[94m%-#20lx\033[0m ", buff, func->addr);
 		for(size_t j = 0; j < size_maps; j++){
 			if(maps[j].addr_start <= func->addr && func->addr < maps[j].addr_end)
-				printf("%s", maps[j].pathname);
+				printf("\033[95m%s\033[0m", maps[j].pathname);
 		}
 		printf("\n");
 	}
 }
-
 
 // Parse /proc/pid/maps dans une structure struct *maps
 void create_maps_struct()
@@ -318,7 +278,6 @@ void free_maps_struct(){
 	free(maps);
 }
 
-// TODO : a bouger d'ici
 void print_file(char *path)
 {
 	int fd_maps = open(path, O_RDONLY);
@@ -337,15 +296,25 @@ void print_file(char *path)
 	close(fd_maps);
 }
 
-void make_backtrace()
+void print_maps(){
+	printf("%8s%-10s%7s %4s %8s %5s %-27s %s\n", "", 
+		"Adresse", "", "perm", "Offset", 
+		"dev", "inode", "pathname");
+	char path_maps[20];
+	snprintf(path_maps, 20, "/proc/%d/maps", child);
+	print_file(path_maps);
+}
+
+size_t *make_backtrace()
 {
+	size_t *backtrace_addr;
 	size_t sz_alloc_bt = 8;
-	backtrace_brut = realloc(backtrace_brut, sz_alloc_bt * sizeof(size_t));
+	backtrace_addr = malloc(sz_alloc_bt * sizeof(size_t));
 
 	long return_addr;
 	long rbp;
 	
-	backtrace_brut[0] = regs.rip; // premier élément est rip
+	backtrace_addr[0] = regs.rip; // premier élément est rip
 	rbp = regs.rbp;
 
 	size_t i = 0;
@@ -354,43 +323,70 @@ void make_backtrace()
 		return_addr = ptrace(PTRACE_PEEKDATA, child, rbp + 8L, NULL);
 		rbp = ptrace(PTRACE_PEEKDATA, child, rbp, NULL);
 		if((rbp == -1 || return_addr == -1) && errno ){ // catch erreur probable
-			perror("ptrace PEEK_DATA");
+			perror("backtrace ptrace(PEEKDATA)");
+			printf("Continue execution before backtrace\n");
+			return NULL;
 		}
 		
-		backtrace_brut[++i] = return_addr;
+		backtrace_addr[++i] = return_addr;
 		if(i >= sz_alloc_bt) // si on manque de place, on double
-			backtrace_brut = (size_t*) realloc(backtrace_brut, (sz_alloc_bt <<= 1) * sizeof(size_t));
+			backtrace_addr = (size_t*) realloc(backtrace_addr, (sz_alloc_bt <<= 1) * sizeof(size_t));
 	}
 
-	backtrace_brut[++i] = -1; // fin du tab : 0xffffff...
+	backtrace_addr[++i] = -1; // fin du tab : 0xffffff...
+	return backtrace_addr;
+}
+
+void print_backtrace(){
+	size_t *backtrace_addr = make_backtrace();
+	if(!backtrace_addr) return;
+
+	// le dernier élement du tableau est -1
+	for(size_t i = 0; backtrace_addr[i] != (size_t)(-1); i++){
+		size_t func_offset;
+		const char* func_name = addr_to_func_name(backtrace_addr[i], &func_offset);
+
+		printf(" \033[94m%#-17lx\033[33m%s \033[95m(+%#lx)\033[0m\n", backtrace_addr[i], func_name, func_offset); 
+	}
+	free(backtrace_addr);
 }
 
 // TODO : addr
-// #define FROM_RBP 0xffffffffffffffff
 void print_stack(size_t addr, size_t number)
 {
 	long value;
 	unsigned long long rbp = regs.rbp;
-	printf("%16s %18s %23s", "Addr", "Hex", "Dec");
+	const unsigned long long rsp = regs.rsp;
+	printf("\033[94m%16s \033[95m%18s \033[32m%23s", "Addr", "Hex", "Dec");
 	
+	bool print_ret_addr = false;
+
 	// on parcours la stack, de rsp jusqu'à max
-	for(size_t i = regs.rsp; i < regs.rsp + 8 * number; i += 8){
-		value = ptrace(PTRACE_PEEKDATA, child, i, NULL);
+	for(size_t i = 0; i < 8 * number; i += 8){
+		value = ptrace(PTRACE_PEEKDATA, child, rsp + i, NULL);
 		if((value == -1) && errno ){
-			perror("ptrace PEEK_DATA");
+			perror("print_stack : ptrace(PEEK_DATA)");
 			exit(1);
 		} // catch erreur probable
 		
 		// on affiche la valeurs en Hex et en Dec
-		printf("\n%16lx %#18lx %23ld", i, value, value);
+		printf("\n\033[94m%#16llx \033[95m%#18lx ", rsp + i, value);
 
-
-		if(i == rbp){
-			printf(" (rbp)"); // on indique où sont les rbp
+		if(rsp + i == rbp){
+			printf("%13s\033[94m rbp\033[0m", ""); // on indique où sont les rbp
 			rbp = value; // on recupere le rbp de la precedente stackframe
+			print_ret_addr = true;
 		}
+		else if(print_ret_addr == true){
+			size_t func_offset;
+			const char* func_name = addr_to_func_name(value, &func_offset);
+			printf("%6s\033[33m%s \033[95m(+%#lx)\033[0m", "", func_name, func_offset); 
+			print_ret_addr = false;
+		}
+		else
+			printf("\033[32m%23ld", value);
 	}
-	printf("\n");
+	printf("\033[0m\n");
 }
 
 void print_ldd()
@@ -505,14 +501,62 @@ void print_signal()
 	}
 
 	printf("\n%-30s %16s %16s\n", "Signal :", "errno :", "code :");
-	printf("%-30s %16s %16d\n", 
+	printf("\033[31m%-30s\033[0m %16s %16d\n\033[91m", 
 			strsignal(siginfo.si_signo), 
 			strerror(siginfo.si_errno), 
 			siginfo.si_code
 			);
 	print_si_code(&siginfo);
-	printf("\n");
+	printf("\033[0m\n");
 }
 
+char **get_local_func(size_t **addr_list, size_t *size_arr)
+{
+	int nb_symbols;
+	char *strtab;
 
+	Elf64_Sym *symtab;
+
+	char **str_list;
+	size_t size_alloc = 16;
+
+	size_t size_list = 0;
+	str_list = (char**) malloc(size_alloc * sizeof(char*));
+	*addr_list = (size_t*) malloc(size_alloc * sizeof(size_t));
+
+	for (int i = 0; i < hdr->e_shnum; i++){
+		if (sections[i].sh_type == SHT_SYMTAB /*|| sections[i].sh_type == SHT_DYNSYM*/) 
+		{
+			symtab = (Elf64_Sym *)((char *)start + sections[i].sh_offset);
+			nb_symbols = sections[i].sh_size / sections[i].sh_entsize;
+			strtab = (char*)((char*)start + sections[sections[i].sh_link].sh_offset);
+
+			for (int j = 0; j < nb_symbols; ++j) {
+				// Si le symbole est une fonction et que son adresse
+				// est 0, on garde son nom, pour resoudre son adresse avec dlsym
+				if(	ELF64_ST_TYPE(symtab[j].st_info) == STT_FUNC && symtab[j].st_value != 0){
+						str_list[size_list] = strtab + symtab[j].st_name;
+						(*addr_list)[size_list] = symtab[j].st_value;
+						size_list++;
+
+						// si on manque de place on reallou 2 fois plus
+						if(size_list >= size_alloc){
+							size_alloc <<= 1;
+							str_list = realloc(str_list, size_alloc * sizeof(char*));
+							*addr_list = realloc(*addr_list, size_alloc * sizeof(size_t));
+						}
+					}
+			}
+		}
+	}
+	*size_arr = size_list;
+	return str_list;
+}
+
+void sig_handle(__attribute__((unused)) int sig)
+{
+	close_db(); // on free proprement
+	printf("\n");
+	exit(0);
+}
 

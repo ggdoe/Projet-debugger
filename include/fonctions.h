@@ -1,6 +1,9 @@
 #ifndef FONCTION_H
 #define FONCTION_H
 
+// VIDE
+
+/*
 #include <dlfcn.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -22,6 +25,7 @@
 #include <sys/mman.h>
 
 #include "tools.h"
+*/
 
 // a bouger dans le .c
 

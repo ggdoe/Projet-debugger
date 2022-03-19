@@ -2,29 +2,26 @@
 
 #include "tools.h"
 
-void sig_handle(int sig);
+static void print_usage();
 
-int main()
+int main(int argc, char *argv[])
 {
-	char *args[] = {"./test_segv", NULL};
-	char usage[] = "Usage : c s S a m B b# p l r q\n";
+	// char *args[] = {"./test_segv", NULL};
 	
-	// init_db(args) qui appel ces 3 fonctions
-	init_db(args);
-	signal(SIGINT, sig_handle); // on catch ^C
+	init_db(argc, argv);
 
-	printf("%s", usage);
-
-	int quit = 0;
-	bool at_start = true;
+	print_usage();
+	printf("---------------------------------------------------------------\n");
+		
+	bool quit = 0;
 
 	while(!quit){
+		printf("\033[33m");
 		char key = getchar(); // à ameliorer éventuellement
-		printf("---------------------------------------------------------------\n");
+		printf("\033[0m---------------------------------------------------------------\n");
 		
 		switch(key){
 			case 'c':
-				at_start = false;
 				if(!continue_exec()){
 					printf("Child finish.\n");
 					quit = true;
@@ -41,15 +38,7 @@ int main()
 				print_all_func();
 				break;
 			case 'm': // print /proc/child/maps
-				{
-					printf("TODO\n");
-					// printf("%8s%-10s%7s %4s %8s %5s %-27s %s\n", "", 
-					// 	"Adresse", "", "perm", "Offset", 
-					// 	"dev", "inode", "pathname");
-					// char path_maps[20];
-					// snprintf(path_maps, 20, "/proc/%d/maps", child);
-					// print_file(path_maps);
-				}
+				print_maps();
 				break;
 			case 'p': // /proc/child/...
 				// opendir ... 
@@ -62,22 +51,12 @@ int main()
 					if(scanf("%lu", &max_stack) != 1 // si scanf 
 						|| !max_stack) 
 						max_stack = 5; // par defaut 5 lignes de stack
-					print_stack(0,max_stack);
+					print_stack(0,max_stack); 
 					fflush(stdin); // tentative pour que scanf ne pollue pas getchar()
 				}
 				break;
 			case 'B': // backtrace
-				// if(!at_start)
-				// {
-				// 	size_t *arr_backtrace = mbacktrace(child, &regs);
-				// 	// le dernier élement du tableau est -1
-				// 	for(size_t i = 0; arr_backtrace[i] != (size_t)(-1); i++){
-				// 		size_t offset;
-				// 		char *func_name = addr_to_func_name(arr_backtrace[i], start, addr_dyn, maps, &offset);
-				// 		printf("%#lx \t %s (+%#lx)\n", arr_backtrace[i], func_name, offset);
-				// 	}
-				// 	free(arr_backtrace);
-				// }
+				print_backtrace();
 				break;
 			case 'r':
 				print_regs();
@@ -86,11 +65,11 @@ int main()
 				print_ldd();
 				break;
 			case 'q':
-				quit = 1;
+				quit = true;
 				break;
 			case '\n': break;
 			case 'h': case '\0': default:
-				printf("%s", usage);
+				print_usage();
 				break;
 		}
 	}
@@ -98,7 +77,17 @@ int main()
 	return 0;
 }
 
-void sig_handle(__attribute__((unused)) int sig)
-{
-	printf("\nq to quit (close, free and kill child)\n");
+void print_usage(){
+	printf( " \033[32mc\033[94m  : continue execution\n" \
+			" \033[32ms\033[94m  : print symbole table\n" \
+			" \033[32mS\033[94m  : print section header\n" \
+			" \033[32ma\033[94m  : print all functions\n" \
+			" \033[32mm\033[94m  : print //proc//maps\n" \
+			" \033[32mp\033[94m  : TODO explore //proc\n" \
+			" \033[32mb\033[95m#\033[94m : print stack (\033[95m#\033[94m is anumber)\n" \
+			" \033[32mB\033[94m  : print backtrace\n" \
+			" \033[32mr\033[94m  : print registers\n" \
+			" \033[32ml\033[94m  : print ldd\n" \
+			" \033[32mq\033[94m  : quit\n" \
+			" \033[32mh\033[94m  : help\033[0m\n");
 }

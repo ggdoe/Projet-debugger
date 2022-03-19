@@ -4,18 +4,18 @@ project("Projet AISE" C)
 include_directories("./include/")
 
 # On compile la lib d'interposition
-add_library(interposition SHARED src/interposition.c src/load_elf.c)
+add_library(interposition SHARED src/interposition/interposition.c src/load_elf.c)
 set_property(TARGET interposition PROPERTY POSITION_INDEPENDENT_CODE True) 
 target_link_libraries(interposition dl)
 
 # On build le "convertisseur"
-add_executable(mk_libinter_h src/mk_libinter_h.c)
+add_executable(mk_libinter_h src/interposition/mk_libinter_h.c)
 add_dependencies(mk_libinter_h interposition) # on build la lib avant le convertisseur
 # On "convertit" la lib d'interposition en .h
 add_custom_target(run_mk_libinter_h COMMAND mk_libinter_h) # on ajoute la commande pour lancer le convertisseur
 
 
-add_executable(db src/main.c src/fonction.c src/load_elf.c src/print_elf.c src/print_tools.c)
+add_executable(db src/main.c src/fonctions.c src/load_elf.c src/print_elf.c src/print_tools.c)
 add_dependencies(db run_mk_libinter_h) # on lance le convertisseur avant avant la conpilation du programme principal
 
 add_executable(test_segv tests/segfault.c)

@@ -27,16 +27,20 @@ void print_section_header();
 // void print_reloc_table();
 
 // fonction.c
-void init_db(char *child_args[]);
+void init_db(int argc, char *argv[]);
 void close_db();
 bool continue_exec();
+
 void print_stack(size_t addr, size_t number);
 void print_ldd();
 void print_signal();
 void print_file(char *path);
+void print_maps();
 void print_all_func();
+void print_backtrace();
 
-// char *addr_to_func_name(size_t addr, size_t *offset);
+char *addr_to_func_name(size_t addr, size_t *offset);
+
 // size_t str_to_addr(const char *str_func);
 
 #endif

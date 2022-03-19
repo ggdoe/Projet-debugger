@@ -52,8 +52,8 @@ int bar(int *b){
 
 int main()
 {
-	printf("pid : %d\n", getpid());
+	// printf("pid : %d\n", getpid());
 	foo();
-	printf("fin\n");
+	// printf("fin\n");
 	return 0;
 }
