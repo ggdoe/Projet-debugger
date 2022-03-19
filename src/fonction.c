@@ -1,145 +1,276 @@
-#include "fonctions.h"
+// #include "fonctions.h"
+#include "libinter.h" // binaire de la lib d'interposition
 
-#include "libinter.h"
+#include <dlfcn.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <signal.h>
+#include <string.h>
+#include <fcntl.h>
+#include <elf.h>
+#include <limits.h>
+#include <stdbool.h>
+#include <err.h>
 
-char *addr_to_func_name(size_t addr, void *start, size_t *addr_dyn, struct maps *maps, size_t *offset){
-	// on recupere toutes les fonctions dynamiques
-	size_t size_arr;
-	char **str_dyn = get_shared_func(start, &size_arr);
+#include <sys/ptrace.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/user.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
 
-	size_t min_dyn = -1, min_local = -1;
-	size_t index_dyn, index_local;
+#include "load_elf.h"
+#include "tools.h"
 
-	for(size_t i = 0; i < size_arr; i++)
-		if(addr - addr_dyn[i]  < min_dyn){
-			min_dyn = addr - addr_dyn[i];
-			index_dyn = i;
-		}
+extern void *start;
+extern Elf64_Ehdr* hdr;
+extern Elf64_Shdr* sections;
 
-	size_t *addr_local;
-	char **str_local = get_local_func(start, &addr_local, &size_arr);
+static char **get_local_func(size_t **addr_list, size_t *size_arr);
+static void make_addr2str();
+static void create_maps_struct();
+static void free_maps_struct();
+static void make_backtrace();
+static void exec_child();
 
-	const size_t offset_local = maps[0].addr_start;
+char **args;
+pid_t child;
 
-	for(size_t i = 0; i < size_arr; i++)
-		if(addr - (addr_local[i] + offset_local)  < min_local){
-			min_local = addr - (addr_local[i] + offset_local);
-			index_local = i;
-		}
+struct user_regs_struct regs;
+size_t *backtrace_brut;
 
-	char *func_name;
+// size_t nbr_func;
+struct addr2str {
+	size_t addr;
+	char *str;
+} *addr2str; // TODO : à free
 
-	if(min_dyn < min_local){
-		func_name = str_dyn[index_dyn];
-		*offset = min_dyn;
+struct maps {
+	size_t addr_start;
+	size_t addr_end;
+	// int flags;
+	//size_t offset; 
+	// char minor;
+	// char major;
+	// int inod;
+	char *pathname;
+} *maps; // TODO : a free
+size_t size_maps;
+
+void init_db(char *child_args[]){
+	args = child_args;
+	exec_child();
+	load_elf(*args);
+
+	create_maps_struct();
+	make_addr2str();
+
+	if(ptrace(PTRACE_GETREGS, child, NULL, &regs) < 0){
+		perror("ptrace(GETREGS)");
+		exit(1);
 	}
-	else{
-		func_name = str_local[index_local];
-		*offset = min_local;
-	}
+	print_signal(); // affiche le sigtrap de ptrace(TRACE_ME)
 
-	free(str_dyn);
-	free(str_local);
-	free(addr_local);
-
-	return func_name;
+	// TODO
 }
 
-void print_all_func(void *start, size_t *addr_dyn, struct maps *maps, size_t size_maps){
-	size_t size_arr;
-	char **str_func = get_shared_func(start, &size_arr);
+void close_db(){
+	kill(child, SIGKILL);
 
-	printf("Fonctions dynamiques : \n");
-	for(size_t i = 0; i < size_arr; i++){
-		char buff[128];
-		// on veut pas les @@  (ex : malloc@@GLIBC_2.2.5)
-		// on copie donc a la main jusqu'a tomber sur 
-		for(size_t j = 0;; j++){
-			buff[j] = str_func[i][j]; // copie j-eme caractère
-			if(buff[j] == '@' || buff[j] == '\0'){
-				buff[j] = '\0';
-				break;
+	free_maps_struct();
+	// free_addr_dyn(addr_dyn);
+	close_elf();
+	// TODO
+}
+
+char **get_local_func(size_t **addr_list, size_t *size_arr)
+{
+	int nb_symbols;
+	char *strtab;
+
+	Elf64_Sym *symtab;
+
+	char **str_list;
+	size_t size_alloc = 16;
+
+	size_t size_list = 0;
+	str_list = (char**) malloc(size_alloc * sizeof(char*));
+	*addr_list = (size_t*) malloc(size_alloc * sizeof(size_t));
+
+	for (int i = 0; i < hdr->e_shnum; i++){
+		if (sections[i].sh_type == SHT_SYMTAB /*|| sections[i].sh_type == SHT_DYNSYM*/) 
+		{
+			symtab = (Elf64_Sym *)((char *)start + sections[i].sh_offset);
+			nb_symbols = sections[i].sh_size / sections[i].sh_entsize;
+			strtab = (char*)((char*)start + sections[sections[i].sh_link].sh_offset);
+
+			for (int j = 0; j < nb_symbols; ++j) {
+				// Si le symbole est une fonction et que son adresse
+				// est 0, on garde son nom, pour resoudre son adresse avec dlsym
+				if(	ELF64_ST_TYPE(symtab[j].st_info) == STT_FUNC && symtab[j].st_value != 0){
+						str_list[size_list] = strtab + symtab[j].st_name;
+						(*addr_list)[size_list] = symtab[j].st_value;
+						size_list++;
+
+						// si on manque de place on reallou 2 fois plus
+						if(size_list >= size_alloc){
+							size_alloc <<= 1;
+							str_list = realloc(str_list, size_alloc * sizeof(char*));
+							*addr_list = realloc(*addr_list, size_alloc * sizeof(size_t));
+						}
+					}
 			}
 		}
-		printf("  %-35s  %-#20lx ", buff, addr_dyn[i]);
-		for(size_t j = 0; j < size_maps; j++){
-			if(maps[j].addr_start <= addr_dyn[i] && addr_dyn[i] < maps[j].addr_end)
-				printf("%s", maps[j].pathname);
-		}
-			printf("\n");
 	}
-	free(str_func);
-
-	printf("\nFonctions locales : \n");
-	size_t *addr_local;
-	str_func = get_local_func(start, &addr_local, &size_arr);
-
-	const size_t offset_local = maps[0].addr_start;
-	for(size_t i = 0; i < size_arr; i++){
-		const size_t absolue_addr = addr_local[i] + offset_local;
-		printf("  %-35s  %-#20lx ", str_func[i], absolue_addr);
-		for(size_t j = 0; j < size_maps; j++){
-			if(maps[j].addr_start <= absolue_addr && absolue_addr < maps[j].addr_end)
-				printf("%s", maps[j].pathname);
-		}
-			printf("\n");
-	}
-	free(str_func);
-	free(addr_local);
+	*size_arr = size_list;
+	return str_list;
 }
 
-size_t *get_addr_dyn(void *start){
-	size_t size_arr;
-	char **str_dyn = get_shared_func(start, &size_arr);
+// in : addr
+// out : str de la func + offset de addr
+char *addr_to_func_name(size_t addr, size_t *offset){
+	size_t offset_min = -1;
+	size_t index_min;
 
-	// size_t total_size_str = 
+	// on parcours le tableau addr2str et recupere l'index dont l'offset est le min
+	for(size_t i = 0; addr2str[i].addr != (size_t)(-1) ;i++){
+		if(addr - addr2str[i].addr < offset_min){
+			offset_min = addr - addr2str[i].addr;
+			index_min = i;
+		}
+	}
+	*offset = offset_min;
+	return addr2str[index_min].str;
+}
 
+// in : str de la func
+// out : addr de la func
+size_t str_to_addr(const char *str_func)
+{
+	int nombre_match = 0;
+	size_t addr;
+
+	// on parcours le tableau addr2str et recupere l'index dont l'offset est le min
+	for(size_t i = 0; addr2str[i].str != NULL ;i++){
+		size_t cursor = 0;
+		bool match = true;
+		// on ne peut pas comparer avec strcmp, pas pratique dans le cas ex: malloc@@GLIB_C.so
+		// on parcours caractère par caractère, on passe si ca match pas
+		while(str_func[cursor] != '\0' && addr2str[i].str[cursor] != '\0'){
+			if(str_func[cursor] != addr2str[i].str[cursor]){
+				match = false;
+				break;
+			}
+			cursor++;
+		}
+		if(match){
+			addr = addr2str[i].addr;
+			nombre_match++;
+		}
+	}
+	return (nombre_match == 1) ? addr : 0;
+}
+
+// créer/alloue le tableau de correspondance : addr <-> func_name
+void make_addr2str(){
+	size_t size_alloc = 64; // taille initiale
+	addr2str = malloc(size_alloc * sizeof(struct addr2str));
+	size_t index = 0;
+		
+	// TODO changer le nom size_arr
+	size_t size_dyn;
+	char **str_func = get_shared_func(&size_dyn);
+	
+	//////// Fonctions dynamiques
+	// On charge les données de lib interposition
 	int fd = open("addr.data", O_RDWR, 0600);
 	if(fd < 0){
 		perror("open");
 		exit(1);
 	}
-
-	// size_t *addr_dyn = malloc(size_arr * sizeof(size_t));
-
-	size_t *addr_dyn = (size_t*) mmap(NULL, size_arr * sizeof(size_t), 
+	// On map le fichier en mémoire, plus simple que read
+	size_t *addr_dyn = (size_t*) mmap(NULL, size_dyn * sizeof(size_t), 
 									PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if(addr_dyn == MAP_FAILED)
+	if(addr_dyn == MAP_FAILED) // TODO tester retirer READ
 	{
 		perror("mmap");
 		abort();
 	}
+	close(fd);
+
+	// on stocke addr et str dans le même ordre
+	for(size_t i = 0; i < size_dyn; i++){
+		addr2str[index].addr = addr_dyn[i];
+		addr2str[index].str = str_func[i];
+		index++;
+		if(index >= size_alloc) // si on manque de place, on double
+			addr2str = realloc(addr2str, (size_alloc <<= 1) * sizeof(struct addr2str));
+	}
 
 	// on supprime le fichier de communication
+	munmap(addr_dyn, size_dyn * sizeof(size_t));
+	unlink("addr.data");
+	free(str_func); // get_shared_func appel malloc
 
-	close(fd);
-	free(str_dyn);
-	return addr_dyn;
+
+	//////// Fonctions locales
+	size_t size_local;
+	size_t *addr_local;
+	str_func = get_local_func(&addr_local, &size_local);
+
+	// on recupere l'addr de debut depuis /maps
+	const size_t offset_runtime = maps[0].addr_start;
+	for(size_t i = 0; i < size_local; i++){
+		addr2str[index].addr = addr_local[i] + offset_runtime;
+		addr2str[index].str = str_func[i];
+		index++;
+		if(index >= size_alloc) // si on manque de place, on double
+			addr2str = realloc(addr2str, (size_alloc <<= 1) * sizeof(struct addr2str));
+	}
+	free(str_func); // get_local_func appel malloc
+	free(addr_local);
+
+	// on marque la fin du tableau
+	addr2str[index].addr = -1; // 0xfffff..
+	addr2str[index].str = NULL;
+
+	// nbr_func = index;
 }
 
-void free_addr_dyn(size_t *addr_dyn)
-{
-	int fd = open("addr.data", O_RDWR, 0600);
-	if(fd < 0){
-		perror("open addr.data");
-		exit(1);
+
+/// TODO : A NETTOYER
+void print_all_func(){
+	for(struct addr2str *func = addr2str; func->str != NULL; func++)
+	{
+		char buff[128];
+		// on veut pas les @@  (ex : malloc@@GLIBC_2.2.5)
+		// on copie à la main jusqu'à tomber sur '@' ou '\0'
+		for(size_t j = 0;; j++){
+			buff[j] = func->str[j]; // copie j-eme caractère
+			if(buff[j] == '@' || buff[j] == '\0'){
+				buff[j] = '\0';
+				break;
+			}
+		}
+		printf("  %-35s  %-#20lx ", buff, func->addr);
+		for(size_t j = 0; j < size_maps; j++){
+			if(maps[j].addr_start <= func->addr && func->addr < maps[j].addr_end)
+				printf("%s", maps[j].pathname);
+		}
+		printf("\n");
 	}
-	struct stat stat;
-	fstat(fd, &stat);
-	close(fd);
-	
-	munmap(addr_dyn, stat.st_size);
-	unlink("addr.data");
 }
 
 
 // Parse /proc/pid/maps dans une structure struct *maps
-struct maps *get_maps_struct(pid_t child, size_t *size_arr)
+void create_maps_struct()
 {
 	char path_maps[24];
 	snprintf(path_maps, 20, "/proc/%d/maps", child);
 
-	// FILE pour profiter de getline()
+	// on ouvre maps avec FILE pour profiter de getline()
 	FILE *fd_maps=fopen(path_maps, "r");
 	if(!fd_maps){
 		perror("fopen");
@@ -148,18 +279,18 @@ struct maps *get_maps_struct(pid_t child, size_t *size_arr)
 
 	size_t size_buf = 0;
 	char* buff; // buffer de getline()
-	char buff_pathname[128]; // buffer extraction du pathname de getline()
+	char buff_pathname[128]; // buffer extraction du pathname de /maps
 	size_t offs; // non utilisé
 
 	size_t sz_alloc_maps = 12; // taille initiale alloué
 	size_t i; // nombres d'elements dans la struct maps
 
-	struct maps *maps = (struct maps*) malloc(sz_alloc_maps * sizeof(struct maps));
+	maps = (struct maps*) malloc(sz_alloc_maps * sizeof(struct maps));
 	
 	// pour chaque ligne de /proc/pid/maps
 	for(i = 0; getline(&buff, &size_buf, fd_maps) > 0; i++)
 	{
-		if(i >= sz_alloc_maps) // si on manque de place, on double le buffer
+		if(i >= sz_alloc_maps) // si on manque de place, on double
 			maps = (struct maps*) realloc(maps, (sz_alloc_maps <<= 1) * sizeof(struct maps));
 
 		// on insere un null au debut pour fix le cas ou la string (dans maps) est vide, sscanf ne met pas la string à jours
@@ -175,21 +306,19 @@ struct maps *get_maps_struct(pid_t child, size_t *size_arr)
 
 		// on alloue la place pour pathname, (strdup appel malloc)
 		maps[i].pathname = strdup(buff_pathname);
-
-		// à suppr ->
-		// printf("%s", buff);
-		// printf("%012lx-%012lx ---- %08lx --\t\t\t\t %s\n", (maps)[i].addr_start, (maps)[i].addr_end, offs, (maps)[i].pathname);
 	}
-	*size_arr = i;
-	return maps; // on renvoie le nombre d'element écrit dans struct maps
+	size_maps = i;
+	free(buff);
+	fclose(fd_maps);
 }
 
-void free_maps_struct(struct maps *maps, size_t size_maps){
+void free_maps_struct(){
 	for(size_t i = 0; i < size_maps; i++)
 		free(maps[i].pathname); // on free le strdup()
 	free(maps);
 }
 
+// TODO : a bouger d'ici
 void print_file(char *path)
 {
 	int fd_maps = open(path, O_RDONLY);
@@ -208,26 +337,18 @@ void print_file(char *path)
 	close(fd_maps);
 }
 
-size_t *mbacktrace(pid_t child, struct user_regs_struct *regs)
+void make_backtrace()
 {
-	// struct maps *smaps;
-	// size_t size_maps = get_maps_struct(child, &smaps);
-	// size_t mem_maps_off = smaps[0].addr_start;
-	// free_maps_struct(&smaps, size_maps);
-
-	// struct stat stat;
-	// fstat(fd_maps, &stat);
-	// printf("stat.st_size : %ld", stat.st_size);
-	
-	size_t *arr_trace = malloc(128 * sizeof(size_t));
+	size_t sz_alloc_bt = 8;
+	backtrace_brut = realloc(backtrace_brut, sz_alloc_bt * sizeof(size_t));
 
 	long return_addr;
 	long rbp;
 	
-	arr_trace[0] = regs->rip;
-	rbp = regs->rbp;
+	backtrace_brut[0] = regs.rip; // premier élément est rip
+	rbp = regs.rbp;
 
-	int i = 0;
+	size_t i = 0;
 	while(rbp != 0)
 	{
 		return_addr = ptrace(PTRACE_PEEKDATA, child, rbp + 8L, NULL);
@@ -236,82 +357,76 @@ size_t *mbacktrace(pid_t child, struct user_regs_struct *regs)
 			perror("ptrace PEEK_DATA");
 		}
 		
-		arr_trace[++i] = return_addr;
+		backtrace_brut[++i] = return_addr;
+		if(i >= sz_alloc_bt) // si on manque de place, on double
+			backtrace_brut = (size_t*) realloc(backtrace_brut, (sz_alloc_bt <<= 1) * sizeof(size_t));
 	}
 
-	arr_trace[++i] = -1; // fin du tab : 0xffffff...
-	
-	// printf("\nbacktrace :\n");
-	// for(int j = 0; j < i; j++){
-	// 	printf("0x%lx (+0x%lx)\n", arr_trace[j], arr_trace[j] - mem_maps_off);
-	// }
-
-	// printf("\n rip : %llx", regs.rip);
-	// printf("\n rbp : %llx", regs.rbp);
-	// printf("\n rsp : %llx\n", regs.rsp);
-	// printf(" ret : %lx\n\n", return_addr); // 0x0000555555555249
-	
-	return arr_trace;
+	backtrace_brut[++i] = -1; // fin du tab : 0xffffff...
 }
 
-void print_stack(pid_t child, long rsp, long rbp, long max)
+// TODO : addr
+// #define FROM_RBP 0xffffffffffffffff
+void print_stack(size_t addr, size_t number)
 {
 	long value;
-
+	unsigned long long rbp = regs.rbp;
 	printf("%16s %18s %23s", "Addr", "Hex", "Dec");
 	
 	// on parcours la stack, de rsp jusqu'à max
-	for(long i = rsp; i < max; i += 8){
+	for(size_t i = regs.rsp; i < regs.rsp + 8 * number; i += 8){
 		value = ptrace(PTRACE_PEEKDATA, child, i, NULL);
-		if((value == -1) && errno ) // catch erreur probable
+		if((value == -1) && errno ){
 			perror("ptrace PEEK_DATA");
+			exit(1);
+		} // catch erreur probable
 		
 		// on affiche la valeurs en Hex et en Dec
 		printf("\n%16lx %#18lx %23ld", i, value, value);
 
 
 		if(i == rbp){
-			printf(" <-- rbp"); // on precise où sont les rbp
+			printf(" (rbp)"); // on indique où sont les rbp
 			rbp = value; // on recupere le rbp de la precedente stackframe
 		}
 	}
 	printf("\n");
 }
 
-void print_ldd(char *args[])
+void print_ldd()
 {
-	pid_t child = fork();
-	if(child < 0){
+	pid_t pid_ldd = fork();
+	if(pid_ldd < 0){
 		perror("fork");
 		exit(1);
 	}
-	else if(child == 0){
-		// LD_TRACE_LOADED_OBJECTS demande a faire ldd 
-		// au lieu de lancer le programme.
-		// Par contre les info sur l'addresse des .so
-		// ne sont pas forcément les mêmes que le child
-		// principal.
+	else if(pid_ldd == 0){
+		// LD_TRACE_LOADED_OBJECTS fait 'ldd' puis termine le process
+		// Par contre les info sur les adresses des .so
+		// ne sont pas les mêmes que le child principal.
 		char *env[] = {"LD_TRACE_LOADED_OBJECTS=1", "LD_VERBOSE=1", NULL};
 		execve(args[0], args, env);
-		perror("exec_child() : execv");
+		perror("print_ldd() : execve");
 		exit(1);
 	}
 	// le child est censé etre terminé après LD_TRACE_LOADED_OBJECTS
-	waitpid(child, NULL, 0);
+	waitpid(pid_ldd, NULL, 0);
 }
 
-pid_t exec_child(char *args[])
+// TODO : passage de args à lib interposition
+void exec_child()
 {
+	// On créé la libinterposition, on lui met les droits executable
 	int fd = open("libinterposition.so", O_RDWR | O_CREAT, 0777);
 	if(fd < 0)
 		perror("open");
-
 	if(ftruncate(fd, SIZE_LIBINTER) < 0)
 	{
 		perror("ftruncate");
 		abort();
 	}
 
+	// On map le fichier en mémoire
 	void *data_lib = mmap(0, SIZE_LIBINTER, PROT_READ | PROT_WRITE | PROT_EXEC , MAP_SHARED, fd, 0);
 	if(data_lib == MAP_FAILED)
 	{
@@ -319,22 +434,32 @@ pid_t exec_child(char *args[])
 		exit(1);
 	}
 	
+	// on copie le binaire de la lib dans le fichier precedement créé
 	memcpy(data_lib, DATA_LIBINTER, SIZE_LIBINTER);
 	munmap(data_lib, SIZE_LIBINTER);
 	close(fd);
+	
+	// On a besoin de passer les args à la lib, on les transmets par fichier
+	FILE *file_args = fopen("args.data", "w");
+	for(size_t i = 0;; i++){
+		const char * arg = args[i];
+		if(arg == NULL) break;
+		fprintf(file_args, "%s\0", arg);
+	}
+	fclose(file_args);
 
 	///// 
-	pid_t child = fork();
+	child = fork();
 	if(child < 0){
 		perror("fork");
-		return 1;
+		exit(1);
 	}
 	else if(child == 0){
-		
+		// On preload la lib
 		char *env[] = {"LD_PRELOAD=./libinterposition.so", NULL};
 		if(ptrace(PTRACE_TRACEME, 0, NULL, NULL) < 0){
-		perror("ptrace TRACEME");
-		exit(1);
+			perror("ptrace TRACEME");
+			exit(1);
 		}
 		execve(args[0], args, env);
 		perror("exec_child() : execve");
@@ -345,40 +470,42 @@ pid_t exec_child(char *args[])
 	ptrace(PTRACE_CONT, child, 0,0); // continue pour charger la lib interposée
 	wait(NULL); // on attend le signal quand la lib interposée aura fini
 	
+	// La lib n'est plus necessaire on peut la supprimer
 	unlink("libinterposition.so");
-	return child;
 }
 
-int continue_exec(pid_t child, struct user_regs_struct *regs){
+// Continue l'execution du prgm
+// renvoi false si le child est terminé
+bool continue_exec(){
 	int status;
 	ptrace(PTRACE_CONT, child, 0,0);
 	wait(&status);
 
 	if (WIFEXITED(status)){
 		printf("Child finish.\n");
-		return 0;
+		return false;
 	}
 
 	// on recupere les registres du child
-	if(ptrace(PTRACE_GETREGS, child, NULL, regs) < 0){
+	if(ptrace(PTRACE_GETREGS, child, NULL, &regs) < 0){
 		perror("ptrace(GETREGS)");
 		exit(1);
 	}
 
-	return 1;
+	return true;
 }
 
-void print_signal(pid_t child)
+void print_signal()
 {
 	siginfo_t siginfo;
-
+	
 	if(ptrace(PTRACE_GETSIGINFO, child, NULL, &siginfo) < 0){
 		perror("ptrace(GETSIGINFO)");
 		exit(1);
 	}
 
-	printf("\n%-40s %16s %16s\n", "Signal :", "errno :", "code :");
-	printf("%-40s %16s %16d\n", 
+	printf("\n%-30s %16s %16s\n", "Signal :", "errno :", "code :");
+	printf("%-30s %16s %16d\n", 
 			strsignal(siginfo.si_signo), 
 			strerror(siginfo.si_errno), 
 			siginfo.si_code

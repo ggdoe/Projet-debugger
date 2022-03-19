@@ -1,59 +1,46 @@
 #define _GNU_SOURCE
 #include <unistd.h>
-#include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/mman.h>
-#include <fcntl.h>
-
 #include <string.h>
 #include <signal.h>
-#include <execinfo.h>
+#include <dlfcn.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 
-#include <elf.h>
+///// visiblement useless
+// #include <sys/types.h>
+// #include <sys/stat.h>
+// #include <execinfo.h>
+// #include <elf.h>
 
-char **get_shared_func(void *start, size_t *size_arr);
-void *load_elf(char *filename);
-void close_elf(char *filename, void* start);
-// size_t cnt = 0;
-
-// void* (*malloc2)(size_t) = NULL;
-// void* (*mmap2)(void *, size_t, int, int, int, off_t);
-
-// void * malloc(size_t size)
-// {
-// 	cnt +=1;
-
-// 	if(malloc2 == NULL)
-// 	{
-// 		mmap2 = (void*(*)(void *, size_t, int, int, int, off_t)) 
-// 					dlsym( RTLD_DEFAULT, "mmap");
-// 		malloc2 = (void*(*)(size_t)) dlsym( RTLD_NEXT, "malloc");
-// 		if(!malloc2 || !mmap2)
-// 			abort();
-// 	}
-// 	return malloc2(size);
-// }
+#include "load_elf.h"
 
 __attribute__((constructor))
 void start_interposition()
 {
-	void* start = NULL;
-	char *args[] = {"./test_segv", NULL};
+	// On recupere les args transmis par le debugger
+	char *args[32]; // 32 args max
+	FILE *file_args = fopen("args.data", "r");
+	if(!file_args) perror("lib interposition : fopen");
+	size_t nbr_args = 0; size_t sz_buf;
+	while(getline(&(args[nbr_args++]), &sz_buf, file_args) > 0);
+	args[nbr_args] = NULL;
+	fclose(file_args);
+	unlink("args.data");
 
-	start = load_elf(*args); // start est l'adresse du elf
+	//
+	load_elf(*args);
 	size_t size_arr;
-	char **str_dyn = get_shared_func(start, &size_arr);
+	char **str_dyn = get_shared_func(&size_arr);
 
+	// on alloue le tableau des adresses des fonctions dyn
 	size_t *addr_dyn = malloc(size_arr * sizeof(size_t));
 
+	// buffer pour retirer les @@ du nom des symboles dyn (de .symtab)
 	char buff[128];
-
 	for(size_t i = 0; i < size_arr; i++){
-
 		// on veut pas les @@  (ex : malloc@@GLIBC_2.2.5)
 		for(size_t j = 0;; j++){
 			buff[j] = str_dyn[i][j]; // copie j-eme caractère
@@ -66,17 +53,17 @@ void start_interposition()
 		addr_dyn[i] = (size_t) dlsym(RTLD_DEFAULT, buff);
 		if(!addr_dyn[i])
 			printf("Impossible de lire l'addr de %s\n", buff);
-
 		// printf("%-18s -> %#lx\n", buff, addr_dyn[i]);
 	}
 
+	////
+	// On transmet les adresses trouvées via le fichier addr.data
 	int fd = open("addr.data", O_RDWR | O_CREAT, 0600);
 	if(fd < 0){
 		perror("open (libinterposition.so)");
 		exit(1);
 	}
-
-	// on redimentionne le fichier
+	// on redimentionne le fichier à la bonne taille
 	if(ftruncate(fd, size_arr * sizeof(size_t)) < 0)
 	{
 		perror("ftruncate");
@@ -93,15 +80,8 @@ void start_interposition()
 	munmap(mmaped, size_arr * sizeof(size_t));
 	free(str_dyn);
 	free(addr_dyn);
-	close_elf(*args, start);
+	close_elf();
 
 	// on remet un SIGTRAP, le debugger peut reprendre la main
 	raise(SIGTRAP);
 }
-
-// __attribute__((destructor))
-// void end_interposition()
-// {
-// 	// printf("Count = %lu\n", cnt);
-// }
-

@@ -24,22 +24,15 @@
 #include "tools.h"
 
 // a bouger dans le .c
-struct maps {
-	size_t addr_start;
-	size_t addr_end;
-	// int flags;
-	//size_t offset; 
-	// char minor;
-	// char major;
-	// int inod;
-	char *pathname;
-};
+
 
 //
 // void init_input();
 // char event_key();
 //
 
+
+/*
 void sig_handle(int sig);
 
 pid_t exec_child(char *args[]);
@@ -69,5 +62,5 @@ void print_section_header(void *start);
 struct maps *get_maps_struct(pid_t child, size_t *size_arr);
 void free_maps_struct(struct maps *maps, size_t size_maps);
 void print_file(char *path);
-
+*/
 #endif

@@ -3,9 +3,6 @@
  - preciser usage
  - nettoyer les includes en trop
 
- - utiliser dladdr : fork execve preload .so constructor mmap shared
-
-
 #####
  - lister les variable globale 
   - table des symbole -> type OBJECT, bind GLOBAL
@@ -16,6 +13,9 @@
  - faire une fonction pour init (malloc des variables globales)
  - faire une fonction pour tous free
  - unlink "addr.data" plus tôt
+ - faire en sorte que SIGINT free et quitte plutot qu'il dise de faire 'q'
+
+ ----- TRANSMETTRE NOM DU PRGM (et args) A LIB INTERPOSITION
 ###
 
 # print_symtab.c
