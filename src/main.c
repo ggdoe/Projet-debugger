@@ -1,13 +1,10 @@
 // #define _GNU_SOURCE
-
 #include "tools.h"
 
 static void print_usage();
 
 int main(int argc, char *argv[])
 {
-	// char *args[] = {"./test_segv", NULL};
-	
 	init_db(argc, argv);
 
 	print_usage();
@@ -19,14 +16,22 @@ int main(int argc, char *argv[])
 		printf("\033[33m");
 		char key = getchar(); // à ameliorer éventuellement
 		printf("\033[0m---------------------------------------------------------------\n");
-		
+
 		switch(key){
 			case 'c':
-				if(!continue_exec()){
-					printf("Child finish.\n");
+				if(!continue_exec())
 					quit = true;
-				}
-				print_signal();
+				else
+					print_signal();
+				break;
+			case 'n': // next instruction
+				if(!next_instruction())
+					quit = true;
+				else
+					print_rip();
+				break;
+			case 'b': // breakpoint
+				do_breakpoint();
 				break;
 			case 's':
 				print_symtab();
@@ -40,18 +45,20 @@ int main(int argc, char *argv[])
 			case 'm': // print /proc/child/maps
 				print_maps();
 				break;
-			case 'p': // /proc/child/...
-				// opendir ... 
-				// scanf ...
-				// print_file(path)
+			case 'v': // TODO add
+				print_glob_var();
 				break;
-			case 'b': //  stack
+			case 'p': // /proc/child/...
+				explore_proc();
+				print_usage();
+				break;
+			case 'x': //  stack
 				{
 					size_t max_stack = 5; // nombre de ligne de stack à afficher
 					if(scanf("%lu", &max_stack) != 1 // si scanf 
 						|| !max_stack) 
 						max_stack = 5; // par defaut 5 lignes de stack
-					print_stack(0,max_stack); 
+					print_stack(max_stack); 
 					fflush(stdin); // tentative pour que scanf ne pollue pas getchar()
 				}
 				break;
@@ -79,12 +86,15 @@ int main(int argc, char *argv[])
 
 void print_usage(){
 	printf( " \033[32mc\033[94m  : continue execution\n" \
+			" \033[32mn\033[94m  : next instruction\n" \
+			" \033[32mb\033[95m#\033[94m : breakpoint (\033[95m#\033[94m is function name)\n" \
 			" \033[32ms\033[94m  : print symbole table\n" \
 			" \033[32mS\033[94m  : print section header\n" \
 			" \033[32ma\033[94m  : print all functions\n" \
-			" \033[32mm\033[94m  : print //proc//maps\n" \
-			" \033[32mp\033[94m  : TODO explore //proc\n" \
-			" \033[32mb\033[95m#\033[94m : print stack (\033[95m#\033[94m is anumber)\n" \
+			" \033[32mv\033[94m  : print globals variables\n" \
+			" \033[32mm\033[94m  : print /proc/maps\n" \
+			" \033[32mp\033[94m  : explore /proc\n" \
+			" \033[32mx\033[95m#\033[94m : print stack (\033[95m#\033[94m is a number)\n" \
 			" \033[32mB\033[94m  : print backtrace\n" \
 			" \033[32mr\033[94m  : print registers\n" \
 			" \033[32ml\033[94m  : print ldd\n" \

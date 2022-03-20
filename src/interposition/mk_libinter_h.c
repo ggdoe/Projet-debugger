@@ -11,16 +11,16 @@ int main(){
 
 	int fd = open("libinterposition.so", O_RDONLY);
 	if(fd < 0)
-		perror("open");
+		perror("mk_lib_h : open");
 
 	fstat(fd, &stat);
 
 	unsigned char *data_lib; // unsigned important sinon fprintf fait nimportequoi (ex : ecrit 0xfffffe3 au lieu de 0xe3 ?????)
 	
-	data_lib = mmap(0, stat.st_size, PROT_READ , MAP_FILE | MAP_SHARED, fd, 0);
+	data_lib = mmap(0, stat.st_size, PROT_READ , MAP_SHARED, fd, 0);
 	if(data_lib == MAP_FAILED)
 	{
-		perror("mmap");
+		perror("mk_lib_h : mmap");
 		exit(1);
 	}
 	close(fd);

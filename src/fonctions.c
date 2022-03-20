@@ -1,40 +1,32 @@
-// #include "fonctions.h"
 #include "libinter.h" // binaire de la lib d'interposition
 
-#include <dlfcn.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <signal.h>
 #include <string.h>
 #include <fcntl.h>
-#include <elf.h>
-#include <limits.h>
-#include <stdbool.h>
-#include <err.h>
 
 #include <sys/ptrace.h>
-#include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/user.h>
-#include <sys/stat.h>
 #include <sys/mman.h>
 
 #include "load_elf.h"
 #include "tools.h"
 
-extern void *start;
-extern Elf64_Ehdr* hdr;
-extern Elf64_Shdr* sections;
-
+static void exec_child();
 static char **get_local_func(size_t **addr_list, size_t *size_arr);
 static void make_addr2str();
+static size_t str_to_addr(const char *str_func);
 static void create_maps_struct();
 static void free_maps_struct();
 static size_t *make_backtrace();
-static void exec_child();
 static void sig_handle(int sig);
+static void remove_breakpoint();
+
+extern void *start;
+extern Elf64_Ehdr* hdr;
+extern Elf64_Shdr* sections;
 
 char **args;
 pid_t child;
@@ -42,22 +34,24 @@ pid_t child;
 struct user_regs_struct regs;
 
 // size_t nbr_func;
-struct addr2str {
+static struct addr2str {
 	size_t addr;
 	char *str;
 } *addr2str;
 
-struct maps {
+static struct maps {
 	size_t addr_start;
 	size_t addr_end;
-	// int flags;
-	//size_t offset; 
-	// char minor;
-	// char major;
-	// int inod;
+	// int flags; size_t offset; char minor; char major; int inod;
 	char *pathname;
 } *maps;
 size_t size_maps;
+
+static struct breakpoint_list{
+	size_t addr;
+	long old_value;
+} *breakpoint_list;
+size_t nb_breakpoint;
 
 void init_db(int argc, char *argv[]){
 	if(argc < 2){ printf("%s missing file arguments\n", *argv); exit(1);} 
@@ -73,18 +67,23 @@ void init_db(int argc, char *argv[]){
 	create_maps_struct();
 	make_addr2str();
 
-	signal(SIGINT, sig_handle); // on catch ^C
+	nb_breakpoint = 0;
+
+	signal(SIGINT, sig_handle); // on catch ^C pour free avant de quitter
 
 	if(ptrace(PTRACE_GETREGS, child, NULL, &regs) < 0){
-		perror("ptrace(GETREGS)");
+		perror("init_db : ptrace(GETREGS)");
 		exit(1);
 	}
+	printf("\n");
 	print_signal(); // affiche le sigtrap de ptrace(TRACE_ME)
 }
 
 void close_db(){
 	kill(child, SIGKILL);
 
+	if(breakpoint_list != NULL)
+		free(breakpoint_list);
 	free(args);
 	free(addr2str);
 	free_maps_struct();
@@ -109,7 +108,7 @@ char *addr_to_func_name(size_t addr, size_t *offset){
 }
 
 // in : str de la func
-// out : addr de la func
+// out : addr de la func, 0 en cas d'échec
 size_t str_to_addr(const char *str_func)
 {
 	int nombre_match = 0;
@@ -150,15 +149,15 @@ void make_addr2str(){
 	// On charge les données de lib interposition
 	int fd = open("addr.data", O_RDWR, 0600);
 	if(fd < 0){
-		perror("open");
+		perror("make_addr2str : open");
 		exit(1);
 	}
 	// On map le fichier en mémoire, plus simple que read
 	size_t *addr_dyn = (size_t*) mmap(NULL, size_dyn * sizeof(size_t), 
-									PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if(addr_dyn == MAP_FAILED) // TODO tester retirer READ
+									PROT_READ, MAP_SHARED, fd, 0);
+	if(addr_dyn == MAP_FAILED)
 	{
-		perror("mmap");
+		perror("make_addr2str : mmap");
 		abort();
 	}
 	close(fd);
@@ -233,7 +232,7 @@ void create_maps_struct()
 	// on ouvre maps avec FILE pour profiter de getline()
 	FILE *fd_maps=fopen(path_maps, "r");
 	if(!fd_maps){
-		perror("fopen");
+		perror("create_maps_struct : fopen");
 		exit(1);
 	}
 
@@ -278,33 +277,6 @@ void free_maps_struct(){
 	free(maps);
 }
 
-void print_file(char *path)
-{
-	int fd_maps = open(path, O_RDONLY);
-	if(fd_maps < 0)
-		perror("open");
-
-	const size_t size_buf = 1<<7;
-	char *buf = malloc(size_buf);
-	ssize_t nbr_read;
-
-	while((nbr_read = read(fd_maps, buf, size_buf)) > 0){
-		write(STDOUT_FILENO, buf, nbr_read);
-	}
-	
-	free(buf);
-	close(fd_maps);
-}
-
-void print_maps(){
-	printf("%8s%-10s%7s %4s %8s %5s %-27s %s\n", "", 
-		"Adresse", "", "perm", "Offset", 
-		"dev", "inode", "pathname");
-	char path_maps[20];
-	snprintf(path_maps, 20, "/proc/%d/maps", child);
-	print_file(path_maps);
-}
-
 size_t *make_backtrace()
 {
 	size_t *backtrace_addr;
@@ -323,7 +295,7 @@ size_t *make_backtrace()
 		return_addr = ptrace(PTRACE_PEEKDATA, child, rbp + 8L, NULL);
 		rbp = ptrace(PTRACE_PEEKDATA, child, rbp, NULL);
 		if((rbp == -1 || return_addr == -1) && errno ){ // catch erreur probable
-			perror("backtrace ptrace(PEEKDATA)");
+			perror("backtrace - ptrace(PEEKDATA)");
 			printf("Continue execution before backtrace\n");
 			return NULL;
 		}
@@ -351,8 +323,8 @@ void print_backtrace(){
 	free(backtrace_addr);
 }
 
-// TODO : addr
-void print_stack(size_t addr, size_t number)
+// print la stack depuis rsp
+void print_stack(size_t number)
 {
 	long value;
 	unsigned long long rbp = regs.rbp;
@@ -393,7 +365,7 @@ void print_ldd()
 {
 	pid_t pid_ldd = fork();
 	if(pid_ldd < 0){
-		perror("fork");
+		perror("print_ldd : fork");
 		exit(1);
 	}
 	else if(pid_ldd == 0){
@@ -402,7 +374,7 @@ void print_ldd()
 		// ne sont pas les mêmes que le child principal.
 		char *env[] = {"LD_TRACE_LOADED_OBJECTS=1", "LD_VERBOSE=1", NULL};
 		execve(args[0], args, env);
-		perror("print_ldd() : execve");
+		perror("print_ldd : execve");
 		exit(1);
 	}
 	// le child est censé etre terminé après LD_TRACE_LOADED_OBJECTS
@@ -415,18 +387,18 @@ void exec_child()
 	// On créé la libinterposition, on lui met les droits executable
 	int fd = open("libinterposition.so", O_RDWR | O_CREAT, 0777);
 	if(fd < 0)
-		perror("open");
+		perror("exec_child : open");
 	if(ftruncate(fd, SIZE_LIBINTER) < 0)
 	{
-		perror("ftruncate");
+		perror("exec_child : ftruncate");
 		abort();
 	}
 
 	// On map le fichier en mémoire
-	void *data_lib = mmap(0, SIZE_LIBINTER, PROT_READ | PROT_WRITE | PROT_EXEC , MAP_SHARED, fd, 0);
+	void *data_lib = mmap(0, SIZE_LIBINTER, PROT_WRITE, MAP_SHARED, fd, 0);
 	if(data_lib == MAP_FAILED)
 	{
-		perror("mmap");
+		perror("exec_child : mmap");
 		exit(1);
 	}
 	
@@ -443,22 +415,22 @@ void exec_child()
 		fprintf(file_args, "%s\0", arg);
 	}
 	fclose(file_args);
-
+	
 	///// 
 	child = fork();
 	if(child < 0){
-		perror("fork");
+		perror("exec_child : fork");
 		exit(1);
 	}
 	else if(child == 0){
 		// On preload la lib
 		char *env[] = {"LD_PRELOAD=./libinterposition.so", NULL};
 		if(ptrace(PTRACE_TRACEME, 0, NULL, NULL) < 0){
-			perror("ptrace TRACEME");
+			perror("exec_child : ptrace(TRACEME)");
 			exit(1);
 		}
 		execve(args[0], args, env);
-		perror("exec_child() : execve");
+		perror("exec_child : execve");
 		exit(1);
 	}
 	wait(NULL); // on attend le sigtrap de PTRACE_ME
@@ -478,17 +450,94 @@ bool continue_exec(){
 	wait(&status);
 
 	if (WIFEXITED(status)){
-		printf("Child finish.\n");
+		printf("\033[31mChild finish.\033[0m\n");
 		return false;
 	}
 
 	// on recupere les registres du child
 	if(ptrace(PTRACE_GETREGS, child, NULL, &regs) < 0){
-		perror("ptrace(GETREGS)");
+		perror("continue_exec : ptrace(GETREGS)");
 		exit(1);
 	}
 
+	remove_breakpoint();
 	return true;
+}
+
+bool next_instruction(){
+	int status;
+	ptrace(PTRACE_SINGLESTEP, child, 0,0);
+	wait(&status);
+
+	if (WIFEXITED(status)){
+		printf("\033[31mChild finish.\033[0m\n");
+		return false;
+	}
+
+	unsigned long long old_rip = regs.rip;
+
+	// on recupere les registres du child
+	if(ptrace(PTRACE_GETREGS, child, NULL, &regs) < 0){
+		perror("next_instruction : ptrace(GETREGS)");
+		exit(1);
+	}
+	if(old_rip == regs.rip){
+		print_signal();
+		printf("\n");
+	}
+
+	remove_breakpoint();
+	return true;
+}
+
+void do_breakpoint(){
+	char func_name[64];
+	size_t addr;
+	
+	printf("\n \033[91m>\033[33m ");
+	scanf("%s", func_name);
+	printf("\033[0m");
+
+	addr = str_to_addr(func_name);
+	if(addr == 0){
+		printf("\033[91mFonction inconnue : %s\n", func_name);
+		return;
+	}
+
+	for(size_t i = 0; i < nb_breakpoint; i++)
+		if(addr == breakpoint_list[i].addr){
+			printf("\033[91mBreakpoint déjà existant : \033[33m%s\033[35m (\033[94m%#lx\033[35m)\033[0m\n", func_name, addr);
+			return;
+		}
+
+	printf("\033[35mBreakpoint à \033[33m%s\033[35m (\033[94m%#lx\033[35m)\033[0m\n", func_name, addr);
+
+	long old_value = ptrace(PTRACE_PEEKDATA, child, addr, NULL);
+
+	breakpoint_list = realloc(breakpoint_list, 
+				(nb_breakpoint + 1) * sizeof(struct breakpoint_list));
+	breakpoint_list[nb_breakpoint].addr = addr;
+	breakpoint_list[nb_breakpoint].old_value = old_value;
+	nb_breakpoint++;
+	
+	long int3 = (old_value & 0xffffffffffffff00) | 0xcc;
+	ptrace(PTRACE_POKEDATA, child, addr, int3);
+	
+}
+
+void remove_breakpoint(){
+	const unsigned long long rip = regs.rip;
+	
+	for(size_t i = 0; i < nb_breakpoint; i++){
+		const size_t addr = breakpoint_list[i].addr;
+		const long old_value = breakpoint_list[i].old_value;
+
+		if(rip == addr){
+			ptrace(PTRACE_POKEDATA, child, addr, old_value);
+			breakpoint_list[i].addr = 0;
+			breakpoint_list[i].old_value = 0;
+		}
+	}
 }
 
 void print_signal()
@@ -496,11 +545,11 @@ void print_signal()
 	siginfo_t siginfo;
 	
 	if(ptrace(PTRACE_GETSIGINFO, child, NULL, &siginfo) < 0){
-		perror("ptrace(GETSIGINFO)");
+		perror("print_signal : ptrace(GETSIGINFO)");
 		exit(1);
 	}
 
-	printf("\n%-30s %16s %16s\n", "Signal :", "errno :", "code :");
+	printf("%-30s %16s %16s\n", "Signal :", "errno :", "code :");
 	printf("\033[31m%-30s\033[0m %16s %16d\n\033[91m", 
 			strsignal(siginfo.si_signo), 
 			strerror(siginfo.si_errno), 

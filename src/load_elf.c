@@ -25,15 +25,15 @@ void load_elf(char *filename)
 
 	fd = open(filename, O_RDONLY);
 	if(fd < 0)
-		perror("open");
+		perror("load_elf : open");
 
 	fstat(fd, &stat);
 	map_size = stat.st_size;
 
-	start = mmap(0, map_size, PROT_READ , MAP_FILE | MAP_SHARED, fd, 0);
+	start = mmap(0, map_size, PROT_READ , MAP_SHARED, fd, 0);
 	if(start == MAP_FAILED)
 	{
-		perror("mmap");
+		perror("load_elf : mmap");
 		exit(1);
 	}
 	close(fd);
@@ -80,16 +80,17 @@ char **get_shared_func(size_t *size_arr)
 				// Si le symbole est une fonction et que son adresse
 				// est 0, on garde son nom, pour resoudre son adresse avec dlsym
 				if(	ELF64_ST_TYPE(symtab[j].st_info) == STT_FUNC && symtab[j].st_value == 0){
-						shared_funcs[(*size_arr)++] = strtab + symtab[j].st_name;
+					shared_funcs[(*size_arr)++] = strtab + symtab[j].st_name;
 
-						// si on manque de place on reallou 2 fois plus
-						if(*size_arr >= size_alloc)
-							shared_funcs = realloc(shared_funcs, (size_alloc <<= 1) * sizeof(char*));
-					}
+					// si on manque de place on reallou 2 fois plus
+					if(*size_arr >= size_alloc)
+						shared_funcs = realloc(shared_funcs, (size_alloc <<= 1) * sizeof(char*));
+				}
 			}
+			break;
 		}
 	}
-	if(!found){// si on a pas trouver la table des symboles
+	if(!found){// si on n'a pas trouvé la table des symboles
 		tabletype = SHT_DYNSYM; // on cherche la table des symboles dynamique
 		found = true; // true pour eviter boucle infini si il n'y a pas de table des symboles
 		goto redo;
@@ -97,6 +98,4 @@ char **get_shared_func(size_t *size_arr)
 
 	return shared_funcs;
 }
-
-// TODO à deplacer autre part
 

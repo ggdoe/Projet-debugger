@@ -52,6 +52,7 @@ int bar(int *b){
 
 int main()
 {
+	raise(SIGUSR1);
 	// printf("pid : %d\n", getpid());
 	foo();
 	// printf("fin\n");

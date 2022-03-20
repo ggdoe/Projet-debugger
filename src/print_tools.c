@@ -5,6 +5,12 @@ extern struct user_regs_struct regs;
 static char *str_syscall(unsigned long long orig_eax);
 static void print_str_eflags(const char* format);
 
+void print_rip(){
+	size_t rip_offset;
+	const char* rip_name = addr_to_func_name(regs.rip, &rip_offset);
+	printf("  \033[91m%9s \033[94m%#18llx %5s\033[33m%s \033[95m(+%#lx)\n", "rip", regs.rip, "", rip_name, rip_offset);
+}
+
 void print_regs(){
 	printf("  \033[91m%9s \033[94m%#18llx %5s\033[91m%s\n", "orig_rax", regs.orig_rax, "", str_syscall(regs.orig_rax));
 	printf("  \033[91m%9s \033[94m%#18llx \033[96m%23llu\n", "rax", regs.rax, regs.rax);
@@ -23,11 +29,7 @@ void print_regs(){
 	printf("  \033[91m%9s \033[94m%#18llx \033[96m%23llu\n", "r13", regs.r13, regs.r13);
 	printf("  \033[91m%9s \033[94m%#18llx \033[96m%23llu\n", "r14", regs.r14, regs.r14);
 	printf("  \033[91m%9s \033[94m%#18llx \033[96m%23llu\n", "r15", regs.r15, regs.r15);
-
-	size_t rip_offset;
-	const char* rip_name = addr_to_func_name(regs.rip, &rip_offset);
-	printf("  \033[91m%9s \033[94m%#18llx %5s\033[33m%s \033[95m(+%#lx)\n", "rip", regs.rip, "", rip_name, rip_offset);
-	
+	print_rip();
 	printf("  \033[91m%9s \033[94m%#18llx \033[96m%23llu\n", "fs_base", regs.fs_base, regs.fs_base);
 	printf("  \033[91m%9s \033[94m%#18llx \033[96m%23llu\n", "gs_base", regs.gs_base, regs.gs_base);
 	print_str_eflags("  \033[91m%9s \033[94m%#18llx \033[32m%23s\n");
@@ -175,12 +177,13 @@ void print_si_code(siginfo_t *siginfo)
 			case SI_QUEUE:		printf("SI_QUEUE : Sent by sigqueue."); break;
 			case SI_USER:		printf("SI_USER : Sent by kill, sigsend."); break;
 			case SI_KERNEL:		printf("SI_KERNEL : Send by kernel."); break;
-			default: printf("-- siginfo.si_code (%d) UNKNOWN", siginfo->si_code);
+			default: printf("UNKNOWN siginfo.si_code (%d)", siginfo->si_code);
 		}
 		return;
 	}
 
 	switch(siginfo->si_signo){
+		case 5: printf("Breakpoint"); break;
 		case SIGILL:
 			switch(siginfo->si_code){
 				case ILL_ILLOPN: printf("ILL_ILLOPN : Illegal operand."); break;
@@ -192,7 +195,7 @@ void print_si_code(siginfo_t *siginfo)
 				case ILL_COPROC: printf("ILL_COPROC : Coprocessor error."); break;
 				case ILL_BADSTK: printf("ILL_BADSTK : Internal stack error."); break;
 				case ILL_BADIADDR: printf("ILL_BADIADDR : Unimplemented instruction address."); break;
-				default: printf("-- siginfo.si_code (%d) UNKNOWN", siginfo->si_code);
+				default: printf("SIGILL - UNKNOWN code (%d)", siginfo->si_code);
 			}
 			break;
 		case SIGFPE:
@@ -207,7 +210,7 @@ void print_si_code(siginfo_t *siginfo)
 				case FPE_FLTSUB:	printf("FPE_FLTSUB : Subscript out of range."); break;
 				case FPE_FLTUNK:	printf("FPE_FLTUNK : Undiagnosed floating-point exception."); break;
 				case FPE_CONDTRAP:	printf("FPE_CONDTRAP : Trap on condition."); break;
-				default: printf("-- siginfo.si_code (%d) UNKNOWN", siginfo->si_code);
+				default: printf("SIGFPE - UNKNOWN code (%d)", siginfo->si_code);
 			}
 			break;
 		case SIGSEGV:
@@ -219,7 +222,7 @@ void print_si_code(siginfo_t *siginfo)
 				case SEGV_ACCADI:	printf("SEGV_ACCADI : ADI not enabled for mapped object."); break;
 				case SEGV_ADIDERR:	printf("SEGV_ADIDERR : Disrupting MCD error."); break;
 				case SEGV_ADIPERR:	printf("SEGV_ADIPERR : Precise MCD exception."); break;
-				default: printf("-- siginfo.si_code (%d) UNKNOWN", siginfo->si_code);
+				default: printf("SIGSEGV - UNKNOWN code (%d)", siginfo->si_code);
 			}
 			break;
 		case SIGBUS:
@@ -229,7 +232,7 @@ void print_si_code(siginfo_t *siginfo)
 				case BUS_OBJERR:	printf("BUS_OBJERR : Object specific hardware error."); break;
 				case BUS_MCEERR_AR:	printf("BUS_MCEERR_AR : Hardware memory error: action required."); break;
 				case BUS_MCEERR_AO:	printf("BUS_MCEERR_AO : ardware memory error: action optional."); break;
-				default: printf("-- siginfo.si_code (%d) UNKNOWN", siginfo->si_code);
+				default: printf("SIGBUS - UNKNOWN code (%d)", siginfo->si_code);
 			}
 			break;
 		// si_code for SIGTRAP undefined (?)
@@ -241,7 +244,7 @@ void print_si_code(siginfo_t *siginfo)
 				case TRAP_BRANCH:	printf("TRAP_BRANCH : Process taken branch trap."); break;
 				case TRAP_HWBKPT:	printf("TRAP_HWBKPT : Hardware breakpoint/watchpoint."); break;
 				case TRAP_UNK:		printf("TRAP_UNK : Undiagnosed trap."); break;
-				default: printf("-- siginfo.si_code (%d) UNKNOWN", siginfo->si_code);
+				default: printf("SIGTRAP - UNKNOWN code (%d)", siginfo->si_code);
 			}
 			break;
 		*/
@@ -253,7 +256,7 @@ void print_si_code(siginfo_t *siginfo)
 				case CLD_TRAPPED:	printf("CLD_TRAPPED : Traced child has trapped."); break;
 				case CLD_STOPPED:	printf("CLD_STOPPED : Child has stopped."); break;
 				case CLD_CONTINUED:	printf("CLD_CONTINUED : Stopped child has continued."); break;
-				default: printf("-- siginfo.si_code (%d) UNKNOWN", siginfo->si_code);
+				default: printf("SIGCHLD - UNKNOWN code (%d)", siginfo->si_code);
 			}
 			break;
 		case SIGPOLL:
@@ -264,10 +267,10 @@ void print_si_code(siginfo_t *siginfo)
 				case POLL_ERR:	printf("POLL_ERR : I/O error."); break;
 				case POLL_PRI:	printf("POLL_PRI : High priority input available."); break;
 				case POLL_HUP:	printf("POLL_HUP : Device disconnected."); break;
-				default: printf("-- siginfo.si_code (%d) UNKNOWN", siginfo->si_code);
+				default: printf("SIGPOLL - UNKNOWN code (%d)", siginfo->si_code);
 			}
 			break;
-		default: printf("-- siginfo.si_signo (%d) UNKNOWN", siginfo->si_signo);
+		default: printf("UNKNOWN siginfo.si_signo (%d) ", siginfo->si_signo);
 	}
 }
 

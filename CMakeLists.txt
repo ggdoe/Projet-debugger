@@ -15,22 +15,23 @@ add_dependencies(mk_libinter_h interposition) # on build la lib avant le convert
 add_custom_target(run_mk_libinter_h COMMAND mk_libinter_h) # on ajoute la commande pour lancer le convertisseur
 
 
-add_executable(db src/main.c src/fonctions.c src/load_elf.c src/print_elf.c src/print_tools.c)
+add_executable(db   src/main.c src/fonctions.c 
+                    src/load_elf.c src/print_elf.c 
+                    src/print_tools.c src/print_proc.c)
 add_dependencies(db run_mk_libinter_h) # on lance le convertisseur avant avant la conpilation du programme principal
 
 add_executable(test_segv tests/segfault.c)
-add_executable(test_pm tests/+-.c)
+# add_executable(test_pm tests/+-.c)
 
-# target_link_libraries(db dl)
-# target_link_libraries(test_segv dl)
 
 target_compile_options(db PRIVATE
                         -Wall -Wextra -pedantic
-                        # -Woverlength-strings
+                        -Woverlength-strings #  warning: string length ‘25552’ is greater than the length ‘4095’ ISO C99 compilers are required to support
+                        -Wformat-contains-nul # '\0' dans exec_child()
                         # -Wno-unused-result
 						# -g
                         # -O3
                         )
 
 target_compile_options(test_segv    PRIVATE -g)
-target_compile_options(test_pm      PRIVATE -g)
+# target_compile_options(test_pm      PRIVATE -g)
