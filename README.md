@@ -1,11 +1,14 @@
 # Projet AISE
 
 Trois composantes : 
- - **db*** : le debugger
+ - **db** : le debugger
  - **libinterposition.so** : récupère l'adresse les fonctions des bibliothèques dynamiques et les transmets à **db**
  - **mk_libinter_h** : convertis **libinterposition.so** en C string qu'il met dans **libinter.h** qui sera include par **db**, ce programme est compilé et lancé par **CMake** avant la compilation de **db**. Ça permet à **db** de ne pas être dépendant de **libinterposition.so**.
 
 J'utilise **elf.h**, **ptrace** et un peu **dl** (pour **libinterposition.so**).
+
+**cmake** dans */build* sinon **mk_libinter_h** ne va pas créé le *.h* au bon endroit
+> **./db** *prgm* *arg1* *arg2* ...
 
 ## **db**
 
