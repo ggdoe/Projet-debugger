@@ -87,7 +87,6 @@ void print_glob_var(){
 
 				// On n'affiche que les symboles : Object + Global + Visible
 				if(ELF64_ST_TYPE(symtab[j].st_info) == STT_OBJECT 
-					&& ELF64_ST_BIND(symtab[j].st_info) == STB_GLOBAL
 					&& ELF64_ST_VISIBILITY(symtab[j].st_other) == STV_DEFAULT)
 				{
 					printf(" \033[94m%#018lx \033[32m%5ld  ", 
