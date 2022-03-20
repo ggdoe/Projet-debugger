@@ -1,61 +1,66 @@
--> https://france.paratools.com/hedgedoc/s/c1OJBdnKt
--> https://github.com/openbsd/src/blob/master/libexec/ld.so/ldd/ldd.c
+# Projet AISE
 
-# Analyse de processus en cours d'exécution
+Trois composantes : 
+ - *db* : le debugger
+ - *libinterposition.so* : récupère l'adresse les fonctions des bibliothèques dynamiques et les transmets à *db*
+ - *mk_libinter_h* : convertis *libinterposition.so* en C string qu'il met dans *libinter.h* qui sera include par *db*, ce programme est compilé et lancé par CMake avant la compilation de *db*. Ça permet à *db* de ne pas être dépendant de *libinterposition.so*.
 
-## Description
+J'utilise *elf.h*, *ptrace* et un peu *dl* (pour *libinterposition.so*).
 
-L'objectif de ce projet est de concevoir un outil permettant de comprendre pourquoi un processus ne réalise pas la tâche pour laquelle il a été programmé. L'idée est de se rapprocher au maximum des fonctionnalités offertes par un débuggeur traditionnel, au moyen des connaissances vues en classe. Vous avez *presque* toute liberté pour réaliser cette implémentation. Si vous manquez d'inspiration, imaginez que vous ne disposez pas des outils qui existent aujourd'hui et que vous avez un programme erroné (crash, deadlock, lancement impossible...).
+## **db**
 
-***De quoi avez-vous besoin pour trouver la raison du problème ?***
+### **load_elf.c** et **load_elf.h**
+Contient les fonctions dont dépendent *libinterposition.so* et *db*
+ - *load_elf()* : charge l'elf et le map dans la variable global *\*start*
+ - *close_elf()* : unmap *\*start*
+ - *get_shared_func()* : malloc un tableau de pointeur vers les strings des fonctions des lib dynamiques.
 
-## Pistes de réflexion
+### **main.c**
+Contient l'interface utilisateur (simple).
+ - *main()* : charge db, gestion de touches
+ - *print_usage()*
 
-Votre outil pourrait d'abord un analyseur de programme en fournissant **par exemple** les informations suivantes:
-- informations de bases du processus (PID, PPID, GID, localisation du programme, etc.)
-- l'état de sa mémoire 
-- Les bibliothèques chargées
-- les variables globales disponibles
-- la liste complète des fonctions disponibles
-- ...*Toute information qui vous permet finalement de "caractériser" un processus*
+### **print_elf**
+ - *print_symtab()* : print la table des .symtab et .dynsym
+ - *print_section_header()*
+ - *print_glob_var()* : print les variables globales
 
-Ensuite, il faudra réfléchir aux fonctionnalités qui permettent d'aider un processus erroné, **par exemple**:
-- La pile d'appel de fonctions lors du crash
-- Le signal ayant mené au crash
-- l'adresse / la raison du crash
-- ...
+### **print_tools.c**
+ - *print_rip()* : print l'adresse de rip et la fonction associée.
+ - *print_regs()* : print les registres
+ - *print_str_eflags()* : print le registre eflags sous forme de string
+ - *get_sh_flags()* : utilisé par *print_section_header()*, print le *SHdr.sh_flags* sous forme de string
+ - *get_sh_type()* : retourne une string de *SHdr.sh_type*  
+ - *get_st_info_type()* : retourne une string de info_type de la table des symboles
+ - *get_st_info_bind()*
+ - *get_st_info_visibility()*
+ - *print_st_shndx()*
+ - *print_si_code()* : print siginfo lisiblement
+ - *str_syscall()* : dit quel syscall est appelé par un valeur de *rax*
 
-Il est permis (et même encouragé), d'ajouter autant de fonctionnalités qu'il vous semblerait nécessaire à vous pour débugger un programme. Les fonctionnalités non listées ici seront grandement appréciées et jugées au cas par cas:
-- Liste des arguments (et leur valeur) des fonctions de la pile d'appel au moment de l'erreur
-- Liste des variables automatiques de la fonction courante
-- Affichage du code source (voir format "DWARF")
-- Pistes de correction d'erreurs
-- ...
+### **print_proc.c**
+ - *print_file()* : simple *cat*
+ - *print_maps()* : print */proc/child/maps* et la description de ses champs
+ - *explore_proc()* : navige dans */proc/child/* et en print le contenu
 
-## Rendu & Evaluation
-
-Il existe différentes approches pour réaliser cette tâche, il est entendu que vous devrez développer vous-même l'outil réalisant cette analyse. Cependant, vous êtes autorisés à reposer sur des tierces dépendances (bibliothèques) pour vous **aider**. Le projet sera écrit en C/C++ (car beaucoup d'intéractions avec la libc), tout autre choix devra être fortement justifié. De plus il vous appartient de vous assurer que le programme se compile selon les règles "classiques" (Makefile, CMake, Autotools ou équivalent). La qualité de la gestion logicielle (structure, propreté, documentation, compilation...) sera aussi évaluée.
-
-Il existe globalement deux méthodes que vous êtes libres d'explorer à votre convenance:
-- Greffon interne: on vient injecter un bout de code qui vient s'éxécuter dans le programme (hint: utilisation de *signaux*)
-- Processus externe: un processus parent lance le processus erroné et réalise son analyse de l'extérieur avec les outils adéquats (hint: fonction *ptrace*)
-
-### Rendu avant le Dimanche 20 mars 2021 avant 23:59:59
-
-**Ce projet est à faire seul ou en binôme.**
-
-- le code source **intégral** documenté.
-- un document technique expliquant votre approche et les fonctionnalités que vous avez implémentées. Ceci n'est pas un rapport détaillé de tout votre travail, il n'a pas besoin d'être long.
-
-Tout effort de rendu sera pris en compte, il est clairement plus simple de rendre un code versionné, en ligne (dépôt Github), qu'une archive par mail qui contient encore toute les fichiers objets & binaires. Merci de faire un effort !
-
-:::warning
-Notre principale attente est liée à votre code et sa démo, c'est pour cela que nous insistons sur la taille du rapport qui ne devra être qu'un résumé succint de votre travail.
-:::
-
-### Soutenance le Lundi 28 mars 2021
-
-Votre programme sera lancé sur différents programmes précompilés (des échantillons vous seront donnés pour vos travaux) afin d'observer les différentes informations retournées et leur niveau de cohérence par rapport au problème effectif. Vous aurez pour mission de faire:
-* une démo du programme sur des codes fournis en dernière minute le jour de la soutenance;
-* une présentation des fonctionnalités qui n'auraient pas été couvertes (pas de slides, que la démo + questions/réponses).
-
+### **fonctions.c**
+ - *init_db()* : lance le child, charge le elf, appel *create_maps_struct()* et *make_addr2str()*
+ - *close_db()* : free tous ce qui a été aloué dans le programme
+ - *make_addr2str()* : charge les données de *libinterposition.so*, et créé un tableau de correspondance entre adresse et nom de fonctions
+ - *addr_to_func_name()* : donne le nom de la fonctions à une adresse donnée
+ - *str_to_addr()* : donne l'adresse d'une fonction donnée
+ - *print_all_func()* : print la liste des fonctions
+ - *create_maps_struct()* : parse le fichier */proc/child/maps* dans une struct, utile pour connaitre l'offset général du programme en mémoire et la provenance d'une fonction à une adresse donnée
+ - *free_maps_struct()*
+ - *make_backtrace()* : renvoie un tableau des adresse backtrace : rip, rbp+8, next_rbp+8, ...
+ - *print_backtrace()* : print le nom, l'adresse et l'offset des fonctions backtrace
+ - *print_stack()* : print un nombre donnée de ligne de la stack en partant de rsp
+ - *print_ldd()* : print les bibliothèque dynamique (via LD_TRACE_LOADED_OBJECTS)
+ - *exec_child()* : créé la lib d'interposition, lui tranmet les args, et lance le programme à debugger en la preloadant, puis supprime la lib
+ - *continue_exec()* : continue l'execution du child via ptrace
+ - *next_instruction()* : execute l'instruction suivante via ptrace
+ - *do_breakpoint()* : scanf, créer un breakpoint 0xCC
+ - *remove_breakpoint()*
+ - *get_local_func()* : malloc un tableau de pointeur vers les strings des fonctions locales.
+ - *print_signal()* : print le signal du child et sa description. précise
+ - *sig_handle()* : handle de SIGINT pour free le programme avant de quitter

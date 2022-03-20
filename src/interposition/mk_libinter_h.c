@@ -6,6 +6,9 @@
 #include <sys/mman.h>
 #include <stdlib.h>
 
+// convertis libinterposition.so en C string 
+// et la met dans libinter.h dont dépend db
+
 int main(){
 	struct stat stat;
 
@@ -15,7 +18,7 @@ int main(){
 
 	fstat(fd, &stat);
 
-	unsigned char *data_lib; // unsigned important sinon fprintf fait nimportequoi (ex : ecrit 0xfffffe3 au lieu de 0xe3 ?????)
+	unsigned char *data_lib; // unsigned important sinon fprintf fait nimportequoi (ecrit 0xfffffe3 au lieu de 0xe3)
 	
 	data_lib = mmap(0, stat.st_size, PROT_READ , MAP_SHARED, fd, 0);
 	if(data_lib == MAP_FAILED)

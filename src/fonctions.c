@@ -92,52 +92,6 @@ void close_db(){
 	close_elf();
 }
 
-// in : addr
-// out : str de la func + offset de addr
-char *addr_to_func_name(size_t addr, size_t *offset){
-	size_t offset_min = -1;
-	size_t index_min;
-
-	// on parcours le tableau addr2str et recupere l'index dont l'offset est le min
-	for(size_t i = 0; addr2str[i].str != NULL ;i++){
-		if(addr - addr2str[i].addr < offset_min){
-			offset_min = addr - addr2str[i].addr;
-			index_min = i;
-		}
-	}
-	*offset = offset_min;
-	return addr2str[index_min].str;
-}
-
-// in : str de la func
-// out : addr de la func, 0 en cas d'échec
-size_t str_to_addr(const char *str_func)
-{
-	int nombre_match = 0;
-	size_t addr;
-
-	// on parcours le tableau addr2str et recupere l'index dont l'offset est le min
-	for(size_t i = 0; addr2str[i].str != NULL ;i++){
-		size_t cursor = 0;
-		bool match = true;
-		// on ne peut pas comparer avec strcmp, pas pratique dans le cas ex: malloc@@GLIB_C.so
-		// on parcours caractère par caractère, on passe si ca match pas
-		while(str_func[cursor] != '\0' && addr2str[i].str[cursor] != '\0'){
-			if(str_func[cursor] != addr2str[i].str[cursor]){
-				match = false;
-				break;
-			}
-			cursor++;
-		}
-		if(match){
-			addr = addr2str[i].addr;
-			nombre_match++;
-		}
-	}
-	// s'il n'y a qu'une fonction match str on renvoit addr sinon 0
-	return (nombre_match == 1) ? addr : 0;
-}
-
 // créer/alloue le tableau de correspondance : addr <-> func_name
 void make_addr2str(){
 	size_t size_alloc = 64; // taille initiale
@@ -200,6 +154,52 @@ void make_addr2str(){
 	// on marque la fin du tableau
 	addr2str[index].addr = -1; // 0xfffff..
 	addr2str[index].str = NULL;
+}
+
+// in : addr
+// out : str de la func + offset de addr
+char *addr_to_func_name(size_t addr, size_t *offset){
+	size_t offset_min = -1;
+	size_t index_min;
+
+	// on parcours le tableau addr2str et recupere l'index dont l'offset est le min
+	for(size_t i = 0; addr2str[i].str != NULL ;i++){
+		if(addr - addr2str[i].addr < offset_min){
+			offset_min = addr - addr2str[i].addr;
+			index_min = i;
+		}
+	}
+	*offset = offset_min;
+	return addr2str[index_min].str;
+}
+
+// in : str de la func
+// out : addr de la func, 0 en cas d'échec
+size_t str_to_addr(const char *str_func)
+{
+	int nombre_match = 0;
+	size_t addr;
+
+	// on parcours le tableau addr2str et recupere l'index dont l'offset est le min
+	for(size_t i = 0; addr2str[i].str != NULL ;i++){
+		size_t cursor = 0;
+		bool match = true;
+		// on ne peut pas comparer avec strcmp, pas pratique dans le cas ex: malloc@@GLIB_C.so
+		// on parcours caractère par caractère, on passe si ca match pas
+		while(str_func[cursor] != '\0' && addr2str[i].str[cursor] != '\0'){
+			if(str_func[cursor] != addr2str[i].str[cursor]){
+				match = false;
+				break;
+			}
+			cursor++;
+		}
+		if(match){
+			addr = addr2str[i].addr;
+			nombre_match++;
+		}
+	}
+	// s'il n'y a qu'une fonction match str on renvoit addr sinon 0
+	return (nombre_match == 1) ? addr : 0;
 }
 
 // print la liste des fonctions et leur adresse
@@ -440,7 +440,7 @@ void exec_child()
 		exit(1);
 	}
 	wait(NULL); // on attend le sigtrap de PTRACE_ME
-	ptrace(PTRACE_SETOPTIONS, child, 0, PTRACE_O_EXITKILL);
+	ptrace(PTRACE_SETOPTIONS, child, 0, PTRACE_O_EXITKILL); // on tue le child si on quitte
 	ptrace(PTRACE_CONT, child, 0,0); // continue pour charger la lib interposée
 	wait(NULL); // on attend le signal quand la lib interposée aura fini
 	

@@ -9,13 +9,9 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
-///// visiblement useless
-// #include <sys/types.h>
-// #include <sys/stat.h>
-// #include <execinfo.h>
-// #include <elf.h>
-
 #include "load_elf.h"
+
+// récupère l'adresse les fonctions des bibliothèques dynamiques et les transmets à db
 
 __attribute__((constructor))
 void start_interposition()

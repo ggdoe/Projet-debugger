@@ -2,7 +2,7 @@
 
 extern struct user_regs_struct regs;
 
-static char *str_syscall(unsigned long long orig_eax);
+static char *str_syscall(unsigned long long orig_rax);
 static void print_str_eflags(const char* format);
 
 void print_rip(){
@@ -274,8 +274,8 @@ void print_si_code(siginfo_t *siginfo)
 	}
 }
 
-char *str_syscall(unsigned long long orig_eax){
-	switch(orig_eax){
+char *str_syscall(unsigned long long orig_rax){
+	switch(orig_rax){
 		case 0: return "read (sys_read)"; break;
 		case 1: return "write (sys_write)"; break;
 		case 2: return "open (sys_open)"; break;
