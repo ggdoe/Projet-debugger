@@ -75,7 +75,8 @@ void init_db(int argc, char *argv[]){
 		perror("init_db : ptrace(GETREGS)");
 		exit(1);
 	}
-	printf("\n");
+	printf("\n  ");
+	printf("\033[32mPID : \033[94m%-8d \033[32mPPID : \033[94m%-8d \033[32mGPID : \033[94m%-8u\033[0m\n", child, getpid(), getgid());
 	print_signal(); // affiche le sigtrap de ptrace(TRACE_ME)
 }
 
@@ -140,8 +141,7 @@ void make_addr2str(){
 	size_t size_alloc = 64; // taille initiale
 	addr2str = malloc(size_alloc * sizeof(struct addr2str));
 	size_t index = 0;
-		
-	// TODO changer le nom size_arr
+
 	size_t size_dyn;
 	char **str_func = get_shared_func(&size_dyn);
 	
@@ -381,7 +381,6 @@ void print_ldd()
 	waitpid(pid_ldd, NULL, 0);
 }
 
-// TODO : passage de args à lib interposition
 void exec_child()
 {
 	// On créé la libinterposition, on lui met les droits executable
@@ -540,25 +539,6 @@ void remove_breakpoint(){
 	}
 }
 
-void print_signal()
-{
-	siginfo_t siginfo;
-	
-	if(ptrace(PTRACE_GETSIGINFO, child, NULL, &siginfo) < 0){
-		perror("print_signal : ptrace(GETSIGINFO)");
-		exit(1);
-	}
-
-	printf("%-30s %16s %16s\n", "Signal :", "errno :", "code :");
-	printf("\033[31m%-30s\033[0m %16s %16d\n\033[91m", 
-			strsignal(siginfo.si_signo), 
-			strerror(siginfo.si_errno), 
-			siginfo.si_code
-			);
-	print_si_code(&siginfo);
-	printf("\033[0m\n");
-}
-
 char **get_local_func(size_t **addr_list, size_t *size_arr)
 {
 	int nb_symbols;
@@ -600,6 +580,25 @@ char **get_local_func(size_t **addr_list, size_t *size_arr)
 	}
 	*size_arr = size_list;
 	return str_list;
+}
+
+void print_signal()
+{
+	siginfo_t siginfo;
+	
+	if(ptrace(PTRACE_GETSIGINFO, child, NULL, &siginfo) < 0){
+		perror("print_signal : ptrace(GETSIGINFO)");
+		exit(1);
+	}
+
+	printf("\033[95m%-24s \033[33m%9s \033[36m%8s\n", "Signal :", "errno :", "code :");
+	printf("\033[31m%-24s\033[33m %9s \033[36m%6d\n\033[91m", 
+			strsignal(siginfo.si_signo), 
+			strerror(siginfo.si_errno), 
+			siginfo.si_code
+			);
+	print_si_code(&siginfo);
+	printf("\033[0m\n");
 }
 
 void sig_handle(__attribute__((unused)) int sig)

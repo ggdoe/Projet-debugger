@@ -26,7 +26,7 @@
  >- ajouter fonction print stackframe (de la mm facon que gdb) x/10zg
  >- tester deadlock
  >- afficher variables globales
- - breakpoint
+ >- breakpoint
  >- compter malloc / mmap (interposé mmap, stocker addr retour...)
  >- voir dl_iterate_pdhr
  >- explorer /proc/pid/ avec dir_ent voir TD ls

@@ -14,7 +14,6 @@ add_dependencies(mk_libinter_h interposition) # on build la lib avant le convert
 # On "convertit" la lib d'interposition en .h
 add_custom_target(run_mk_libinter_h COMMAND mk_libinter_h) # on ajoute la commande pour lancer le convertisseur
 
-
 add_executable(db   src/main.c src/fonctions.c 
                     src/load_elf.c src/print_elf.c 
                     src/print_tools.c src/print_proc.c)
@@ -26,8 +25,8 @@ add_executable(test_segv tests/segfault.c)
 
 target_compile_options(db PRIVATE
                         -Wall -Wextra -pedantic
-                        -Woverlength-strings #  warning: string length ‘25552’ is greater than the length ‘4095’ ISO C99 compilers are required to support
-                        -Wformat-contains-nul # '\0' dans exec_child()
+                        -Wno-overlength-strings #  warning: string length ‘25552’ is greater than the length ‘4095’ ISO C99 compilers are required to support
+                        -Wno-format-contains-nul # '\0' dans exec_child()
                         # -Wno-unused-result
 						# -g
                         # -O3

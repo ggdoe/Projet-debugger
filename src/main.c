@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
 			case 'm': // print /proc/child/maps
 				print_maps();
 				break;
-			case 'v': // TODO add
+			case 'v': // print global variables
 				print_glob_var();
 				break;
 			case 'p': // /proc/child/...
@@ -94,7 +94,7 @@ void print_usage(){
 			" \033[32mv\033[94m  : print globals variables\n" \
 			" \033[32mm\033[94m  : print /proc/maps\n" \
 			" \033[32mp\033[94m  : explore /proc\n" \
-			" \033[32mx\033[95m#\033[94m : print stack (\033[95m#\033[94m is a number)\n" \
+			" \033[32mx\033[95m#\033[94m : print stack from rbp (\033[95m#\033[94m is number of line)\n" \
 			" \033[32mB\033[94m  : print backtrace\n" \
 			" \033[32mr\033[94m  : print registers\n" \
 			" \033[32ml\033[94m  : print ldd\n" \
