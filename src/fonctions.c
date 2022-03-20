@@ -33,7 +33,6 @@ pid_t child;
 
 struct user_regs_struct regs;
 
-// size_t nbr_func;
 static struct addr2str {
 	size_t addr;
 	char *str;
@@ -53,9 +52,11 @@ static struct breakpoint_list{
 } *breakpoint_list;
 size_t nb_breakpoint;
 
+// Initialise le debuggeur
 void init_db(int argc, char *argv[]){
 	if(argc < 2){ printf("%s missing file arguments\n", *argv); exit(1);} 
 
+	// on alloue et on remplis le tableau des args du child
 	args = malloc(argc * sizeof(char*));
 	for(int i = 0; i < argc - 1; i++)
 		args[i] = argv[i+1];
@@ -71,6 +72,7 @@ void init_db(int argc, char *argv[]){
 
 	signal(SIGINT, sig_handle); // on catch ^C pour free avant de quitter
 
+	// On récupère les registres
 	if(ptrace(PTRACE_GETREGS, child, NULL, &regs) < 0){
 		perror("init_db : ptrace(GETREGS)");
 		exit(1);
@@ -133,6 +135,7 @@ size_t str_to_addr(const char *str_func)
 			nombre_match++;
 		}
 	}
+	// s'il n'y a qu'une fonction match str on renvoit addr sinon 0
 	return (nombre_match == 1) ? addr : 0;
 }
 
@@ -142,7 +145,7 @@ void make_addr2str(){
 	addr2str = malloc(size_alloc * sizeof(struct addr2str));
 	size_t index = 0;
 
-	size_t size_dyn;
+	size_t size_dyn; // on recupère la liste des func dyn
 	char **str_func = get_shared_func(&size_dyn);
 	
 	//////// Fonctions dynamiques
@@ -179,11 +182,12 @@ void make_addr2str(){
 
 	//////// Fonctions locales
 	size_t size_local;
-	size_t *addr_local;
+	size_t *addr_local; // on recupère la liste des func locales
 	str_func = get_local_func(&addr_local, &size_local);
 
-	// on recupere l'addr de debut depuis /maps
+	// on recupere l'addr de debut des offsets via /proc/maps
 	const size_t offset_runtime = maps[0].addr_start;
+
 	for(size_t i = 0; i < size_local; i++){
 		addr2str[index].addr = addr_local[i] + offset_runtime;
 		addr2str[index].str = str_func[i];
@@ -197,10 +201,9 @@ void make_addr2str(){
 	// on marque la fin du tableau
 	addr2str[index].addr = -1; // 0xfffff..
 	addr2str[index].str = NULL;
-
-	// nbr_func = index;
 }
 
+// print la liste des fonctions et leur adresse
 void print_all_func(){
 	for(struct addr2str *func = addr2str; func->str != NULL; func++)
 	{
@@ -215,6 +218,8 @@ void print_all_func(){
 			}
 		}
 		printf("  \033[33m%-35s  \033[94m%-#20lx\033[0m ", buff, func->addr);
+
+		// print la localisation de l'addr (via /proc/maps)
 		for(size_t j = 0; j < size_maps; j++){
 			if(maps[j].addr_start <= func->addr && func->addr < maps[j].addr_end)
 				printf("\033[95m%s\033[0m", maps[j].pathname);
@@ -277,10 +282,11 @@ void free_maps_struct(){
 	free(maps);
 }
 
+// renvoie liste des addr backtrace
 size_t *make_backtrace()
 {
 	size_t *backtrace_addr;
-	size_t sz_alloc_bt = 8;
+	size_t sz_alloc_bt = 8; // alloc initiale
 	backtrace_addr = malloc(sz_alloc_bt * sizeof(size_t));
 
 	long return_addr;
@@ -290,7 +296,7 @@ size_t *make_backtrace()
 	rbp = regs.rbp;
 
 	size_t i = 0;
-	while(rbp != 0)
+	while(rbp != 0) // rbp = 0 ==> fin de la stacktrace
 	{
 		return_addr = ptrace(PTRACE_PEEKDATA, child, rbp + 8L, NULL);
 		rbp = ptrace(PTRACE_PEEKDATA, child, rbp, NULL);
@@ -299,7 +305,7 @@ size_t *make_backtrace()
 			printf("Continue execution before backtrace\n");
 			return NULL;
 		}
-		
+		// juste en dessous de rbp il y a l'addr de retour
 		backtrace_addr[++i] = return_addr;
 		if(i >= sz_alloc_bt) // si on manque de place, on double
 			backtrace_addr = (size_t*) realloc(backtrace_addr, (sz_alloc_bt <<= 1) * sizeof(size_t));
@@ -361,6 +367,7 @@ void print_stack(size_t number)
 	printf("\033[0m\n");
 }
 
+// print ldd via LD_TRACE_LOADED_OBJECTS=1 (man ld.so)
 void print_ldd()
 {
 	pid_t pid_ldd = fork();
@@ -381,6 +388,7 @@ void print_ldd()
 	waitpid(pid_ldd, NULL, 0);
 }
 
+// execute le child avec les arguments args
 void exec_child()
 {
 	// On créé la libinterposition, on lui met les droits executable
@@ -402,7 +410,7 @@ void exec_child()
 	}
 	
 	// on copie le binaire de la lib dans le fichier precedement créé
-	memcpy(data_lib, DATA_LIBINTER, SIZE_LIBINTER);
+	memcpy(data_lib, DATA_LIBINTER, SIZE_LIBINTER); // warning string length > ‘4095’
 	munmap(data_lib, SIZE_LIBINTER);
 	close(fd);
 	
@@ -459,7 +467,7 @@ bool continue_exec(){
 		exit(1);
 	}
 
-	remove_breakpoint();
+	remove_breakpoint(); // si on a atteint un breakpoint, on le retire
 	return true;
 }
 
@@ -480,29 +488,32 @@ bool next_instruction(){
 		perror("next_instruction : ptrace(GETREGS)");
 		exit(1);
 	}
-	if(old_rip == regs.rip){
+	if(old_rip == regs.rip){ // si l'exec est bloqué, on print le signal
 		print_signal();
 		printf("\n");
 	}
+	else print_rip();
 
-	remove_breakpoint();
+	remove_breakpoint(); // si on a atteint un breakpoint, on le retire
 	return true;
 }
 
+// créé un breakpoint
 void do_breakpoint(){
 	char func_name[64];
 	size_t addr;
 	
 	printf("\n \033[91m>\033[33m ");
-	scanf("%s", func_name);
+	scanf("%s", func_name); // on récypère le non de la fonction où break
 	printf("\033[0m");
 
-	addr = str_to_addr(func_name);
-	if(addr == 0){
+	addr = str_to_addr(func_name); // récupère l'addr de la function
+	if(addr == 0){ // retourne 0 en cas d'échec
 		printf("\033[91mFonction inconnue : %s\n", func_name);
 		return;
 	}
 
+	// on vérifie qu'une breakpoint n'existe pas déjà au même endroit
 	for(size_t i = 0; i < nb_breakpoint; i++)
 		if(addr == breakpoint_list[i].addr){
 			printf("\033[91mBreakpoint déjà existant : \033[33m%s\033[35m (\033[94m%#lx\033[35m)\033[0m\n", func_name, addr);
@@ -511,14 +522,18 @@ void do_breakpoint(){
 
 	printf("\033[35mBreakpoint à \033[33m%s\033[35m (\033[94m%#lx\033[35m)\033[0m\n", func_name, addr);
 
+	// on récupère les instructions à l'addr de la fonction
 	long old_value = ptrace(PTRACE_PEEKDATA, child, addr, NULL);
 
+	// on alloue la liste des breakpoints
 	breakpoint_list = realloc(breakpoint_list, 
 				(nb_breakpoint + 1) * sizeof(struct breakpoint_list));
+	// on stock l'addr et ce qui est écrit à cette addr
 	breakpoint_list[nb_breakpoint].addr = addr;
 	breakpoint_list[nb_breakpoint].old_value = old_value;
 	nb_breakpoint++;
 	
+	// on pose le breakpoint en modifiant directement le binaire (en memoire)
 	long int3 = (old_value & 0xffffffffffffff00) | 0xcc;
 	ptrace(PTRACE_POKEDATA, child, addr, int3);
 	
@@ -531,14 +546,17 @@ void remove_breakpoint(){
 		const size_t addr = breakpoint_list[i].addr;
 		const long old_value = breakpoint_list[i].old_value;
 
-		if(rip == addr){
+		if(rip == addr){// si on a atteint un breakpoint
+			// on remet les instructions originales
 			ptrace(PTRACE_POKEDATA, child, addr, old_value);
+			// et on supprime le breakpoint de la liste
 			breakpoint_list[i].addr = 0;
 			breakpoint_list[i].old_value = 0;
 		}
 	}
 }
 
+// récupère la liste des fonctions locales
 char **get_local_func(size_t **addr_list, size_t *size_arr)
 {
 	int nb_symbols;
@@ -598,7 +616,8 @@ void print_signal()
 			siginfo.si_code
 			);
 	print_si_code(&siginfo);
-	printf("\033[0m\n");
+	printf("\033[0m\n\n");
+	print_rip(); // print regs RIP
 }
 
 void sig_handle(__attribute__((unused)) int sig)

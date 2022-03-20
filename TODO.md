@@ -12,8 +12,8 @@
 
 # print_symtab.c
  >- changer le nom du fichier
- - print_elf_header (https://github.com/adugast/read_elf/blob/master/src/main.c#L83)
- - print_reloc_table 
+ >- print_elf_header (https://github.com/adugast/read_elf/blob/master/src/main.c#L83)
+ >- print_reloc_table 
  
 # fonction.c
  >- print backtrace

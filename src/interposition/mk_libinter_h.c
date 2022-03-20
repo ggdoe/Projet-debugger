@@ -26,17 +26,17 @@ int main(){
 	close(fd);
 
     // On créé le fichier .h qui contient libinterposition.so
-	FILE *out_h = fopen("../include/libinter.h", "w");
-	fprintf(out_h, "#define SIZE_LIBINTER %ld\n", stat.st_size);
-	fprintf(out_h, "#define DATA_LIBINTER \"");
+	FILE *lib_h = fopen("../include/libinter.h", "w");
+	fprintf(lib_h, "#define SIZE_LIBINTER %ld\n", stat.st_size);
+	fprintf(lib_h, "#define DATA_LIBINTER \"");
 
 	for(int i = 0; i < stat.st_size; i++){
-		fprintf(out_h, "\\x%02x", data_lib[i]);
+		fprintf(lib_h, "\\x%02x", data_lib[i]);
 		if(i != 0 && i%20 == 0)
-			fprintf(out_h, "\" \\\n\t\"");
+			fprintf(lib_h, "\" \\\n\t\"");
 	}
-	fprintf(out_h, "\"\n");
-	fclose(out_h);
+	fprintf(lib_h, "\"\n");
+	fclose(lib_h);
 
     // on peut maintenant supprimer libinterposition.so
 	unlink("libinterposition.so");

@@ -6,10 +6,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+// print /proc/pid/...
+
 static void print_file(char *path);
 
 extern pid_t child;
 
+// cat un fichier
 void print_file(char *path)
 {
 	int fd_maps = open(path, O_RDONLY);
@@ -28,6 +31,7 @@ void print_file(char *path)
 	close(fd_maps);
 }
 
+// cat maps
 void print_maps(){
 	printf("%8s%-10s%7s %4s %8s %5s %-27s %s\n", "", 
 		"Adresse", "", "perm", "Offset", 
@@ -37,6 +41,7 @@ void print_maps(){
 	print_file(path_maps);
 }
 
+// explore /proc/child/
 void explore_proc()
 {
 	struct dirent ** cur_dir = NULL;

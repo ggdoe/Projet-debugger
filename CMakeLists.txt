@@ -5,8 +5,8 @@ include_directories("./include/")
 
 # On compile la lib d'interposition
 add_library(interposition SHARED src/interposition/interposition.c src/load_elf.c)
-set_property(TARGET interposition PROPERTY POSITION_INDEPENDENT_CODE True) 
-target_link_libraries(interposition dl)
+set_property(TARGET interposition PROPERTY POSITION_INDEPENDENT_CODE True)
+target_link_libraries(interposition dl) # on appel dlsym dans la lib
 
 # On build le "convertisseur"
 add_executable(mk_libinter_h src/interposition/mk_libinter_h.c)
@@ -19,18 +19,12 @@ add_executable(db   src/main.c src/fonctions.c
                     src/print_tools.c src/print_proc.c)
 add_dependencies(db run_mk_libinter_h) # on lance le convertisseur avant avant la conpilation du programme principal
 
-add_executable(test_segv tests/segfault.c)
-# add_executable(test_pm tests/+-.c)
-
-
 target_compile_options(db PRIVATE
-                        -Wall -Wextra -pedantic
-                        -Wno-overlength-strings #  warning: string length ‘25552’ is greater than the length ‘4095’ ISO C99 compilers are required to support
-                        -Wno-format-contains-nul # '\0' dans exec_child()
-                        # -Wno-unused-result
-						# -g
-                        # -O3
-                        )
+                -Wall -Wextra -pedantic
+                -Wno-overlength-strings #  warning: string length ‘25552’ is greater than the length ‘4095’ ISO C99 compilers are required to support
+                -Wno-format-contains-nul # '\0' dans exec_child()
+                # -O3
+                )
 
-target_compile_options(test_segv    PRIVATE -g)
-# target_compile_options(test_pm      PRIVATE -g)
+# add_executable(test_segv tests/segfault.c)
+# target_compile_options(test_segv    PRIVATE -g)

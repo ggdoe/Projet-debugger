@@ -14,7 +14,7 @@ int main(int argc, char *argv[])
 
 	while(!quit){
 		printf("\033[33m");
-		char key = getchar(); // à ameliorer éventuellement
+		char key = getchar();
 		printf("\033[0m---------------------------------------------------------------\n");
 
 		switch(key){
@@ -27,8 +27,6 @@ int main(int argc, char *argv[])
 			case 'n': // next instruction
 				if(!next_instruction())
 					quit = true;
-				else
-					print_rip();
 				break;
 			case 'b': // breakpoint
 				do_breakpoint();
@@ -81,6 +79,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	close_db();
 	return 0;
 }
 

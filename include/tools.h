@@ -24,25 +24,19 @@ void print_si_code(siginfo_t *siginfo);
 void print_symtab();
 void print_section_header();
 void print_glob_var();
-// void print_elf_header();
-// void print_reloc_table();
 
 // fonction.c
 void init_db(int argc, char *argv[]);
 void close_db();
 bool continue_exec();
 bool next_instruction();
-
+void do_breakpoint();
+char *addr_to_func_name(size_t addr, size_t *offset);
 void print_stack(size_t number);
 void print_ldd();
 void print_signal();
 void print_all_func();
 void print_backtrace();
-
-void do_breakpoint();
-
-char *addr_to_func_name(size_t addr, size_t *offset);
-// size_t str_to_addr(const char *str_func);
 
 // print_proc.c
 void explore_proc();
