@@ -7,7 +7,7 @@ Trois composantes :
 
 J'utilise **elf.h**, **ptrace** et un peu **dl** (pour **libinterposition.so**).
 
-**cmake** dans */build* sinon **mk_libinter_h** ne va pas créé le *.h* au bon endroit
+**cmake** dans */build* sinon **mk_libinter_h** ne va pas créé *libinter.h* au bon endroit
 > **./db** *prgm* *arg1* *arg2* ...
 
 ## **db**
