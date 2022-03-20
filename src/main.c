@@ -87,16 +87,16 @@ void print_usage(){
 	printf( " \033[32mc\033[94m  : continue execution\n" \
 			" \033[32mn\033[94m  : next instruction\n" \
 			" \033[32mb\033[95m#\033[94m : breakpoint (\033[95m#\033[94m is function name)\n" \
-			" \033[32ms\033[94m  : print symbole table\n" \
+			" \033[32ms\033[94m  : print symbols tables\n" \
 			" \033[32mS\033[94m  : print section header\n" \
-			" \033[32ma\033[94m  : print all functions\n" \
-			" \033[32mv\033[94m  : print globals variables\n" \
-			" \033[32mm\033[94m  : print /proc/maps\n" \
 			" \033[32mp\033[94m  : explore /proc\n" \
-			" \033[32mx\033[95m#\033[94m : print stack from rbp (\033[95m#\033[94m is number of line)\n" \
-			" \033[32mB\033[94m  : print backtrace\n" \
-			" \033[32mr\033[94m  : print registers\n" \
+			" \033[32mm\033[94m  : print /proc/maps\n" \
 			" \033[32ml\033[94m  : print ldd\n" \
+			" \033[32ma\033[94m  : print all functions\n" \
+			" \033[32mv\033[94m  : print global variables\n" \
+			" \033[32mr\033[94m  : print registers\n" \
+			" \033[32mx\033[95m#\033[94m : print stack from rsp (\033[95m#\033[94m is number of line)\n" \
+			" \033[32mB\033[94m  : print backtrace\n" \
 			" \033[32mq\033[94m  : quit\n" \
 			" \033[32mh\033[94m  : help\033[0m\n");
 }

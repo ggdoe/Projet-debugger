@@ -9,9 +9,6 @@
 #include <string.h>
 #include <stdbool.h>
 
-// #include <errno.h>
-// #include <sys/types.h>
-
 void *start;
 size_t map_size;
 

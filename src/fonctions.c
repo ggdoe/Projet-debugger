@@ -1,7 +1,6 @@
 #include "libinter.h" // binaire de la lib d'interposition
 
 #include <unistd.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
