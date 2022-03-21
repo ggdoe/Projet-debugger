@@ -545,7 +545,7 @@ void remove_breakpoint(){
 		const size_t addr = breakpoint_list[i].addr;
 		const long old_value = breakpoint_list[i].old_value;
 
-		if(rip == addr){// si on a atteint un breakpoint
+		if(rip == addr + 1){// si on a atteint un breakpoint
 			// on remet les instructions originales
 			ptrace(PTRACE_POKEDATA, child, addr, old_value);
 			// et on supprime le breakpoint de la liste
