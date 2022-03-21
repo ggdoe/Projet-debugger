@@ -418,7 +418,7 @@ void exec_child()
 	for(size_t i = 0;; i++){
 		const char * arg = args[i];
 		if(arg == NULL) break;
-		fprintf(file_args, "%s\0", arg);
+		fprintf(file_args, "%s%c", arg, 0);
 	}
 	fclose(file_args);
 	
