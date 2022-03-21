@@ -551,6 +551,12 @@ void remove_breakpoint(){
 			// et on supprime le breakpoint de la liste
 			breakpoint_list[i].addr = 0;
 			breakpoint_list[i].old_value = 0;
+
+			// le breakpoint à manger le 1er octet 
+			// de la premiere instruction de la fonction
+			// on reposition RIP pour lancer cette instruction proprement
+			regs.rip = addr;
+			ptrace(PTRACE_SETREGS, child, NULL, &regs);
 		}
 	}
 }
