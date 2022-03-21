@@ -22,7 +22,6 @@ add_dependencies(db run_mk_libinter_h) # on lance le convertisseur avant avant l
 target_compile_options(db PRIVATE
                 -Wall -Wextra -pedantic
                 -Wno-overlength-strings #  warning: string length ‘25552’ is greater than the length ‘4095’ ISO C99 compilers are required to support
-                -Wno-format-contains-nul # '\0' dans exec_child()
                 -Wno-maybe-uninitialized
                 -Wno-unused-result
                 -Wno-format-truncation
